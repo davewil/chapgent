@@ -12,3 +12,4 @@
 2026-01-16: Implemented Session Storage (storage.py) with async I/O. Added SessionSummary model. Verified with unit and property-based tests.
 2026-01-16: Implemented Basic TUI Structure (app.py, widgets.py, styles.tcss).
 2026-01-16: Added TUI tests (test_app.py) verifying startup and key bindings.
+2026-01-16: Integrated TUI with Agent Loop. Updated PygentApp to handle agent events and added integration tests (test_integration.py). Verified all tests pass.
