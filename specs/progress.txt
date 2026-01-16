@@ -1,3 +1,6 @@
 2026-01-16: Initialized project structure and configuration.
 2026-01-16: Implemented core tool system (ToolDefinition, tool decorator) and verified with tests.
 2026-01-16: Configured pre-commit hooks for automatic linting (ruff) and testing (pytest).
+2026-01-16: Repository initialized and pushed to GitHub (davewil/pygent).
+2026-01-16: Implemented ToolRegistry class with property-based tests. Added hypothesis dependency.
+2026-01-16: Implemented filesystem tools (read_file, list_files, edit_file) with unit tests.
