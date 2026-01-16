@@ -10,3 +10,5 @@
 2026-01-16: Implemented shell tool (src/pygent/tools/shell.py) with async execution, timeout handling, and output capturing.
 2026-01-16: Added comprehensive unit and property-based tests for shell tool (tests/test_tools/test_shell.py).
 2026-01-16: Implemented Session Storage (storage.py) with async I/O. Added SessionSummary model. Verified with unit and property-based tests.
+2026-01-16: Implemented Basic TUI Structure (app.py, widgets.py, styles.tcss).
+2026-01-16: Added TUI tests (test_app.py) verifying startup and key bindings.

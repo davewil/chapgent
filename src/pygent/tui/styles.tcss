@@ -1,0 +1,51 @@
+/* Textual CSS for pygent */
+
+Screen {
+    layout: grid;
+    grid-size: 2 3;
+    grid-rows: auto 1fr auto;
+    grid-columns: 2fr 1fr;
+}
+
+Header {
+    dock: top;
+    column-span: 2;
+}
+
+Footer {
+    dock: bottom;
+    column-span: 2;
+}
+
+ConversationPanel {
+    column-span: 1;
+    row-span: 1;
+    border: solid $primary;
+    background: $surface;
+    height: 100%;
+}
+
+ToolPanel {
+    column-span: 1;
+    row-span: 1;
+    border: solid $secondary;
+    background: $surface;
+    height: 100%;
+}
+
+MessageInput {
+    column-span: 2;
+    height: auto;
+    dock: bottom;
+    margin: 1 1;
+}
+
+#conversation-messages {
+    height: 100%;
+    scrollbar-size: 1 1;
+}
+
+#tool-output {
+    height: 100%;
+    scrollbar-size: 1 1;
+}

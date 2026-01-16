@@ -33,7 +33,7 @@ async def read_file(path: str) -> str:
     if not file_path.is_file():
         raise IsADirectoryError(f"Path is a directory: {path}")
 
-    async with aiofiles.open(file_path, mode="r", encoding="utf-8") as f:
+    async with aiofiles.open(file_path, encoding="utf-8") as f:
         return await f.read()
 
 
@@ -102,7 +102,7 @@ async def edit_file(path: str, old_str: str, new_str: str) -> str:
     if not file_path.exists():
         raise FileNotFoundError(f"File not found: {path}")
 
-    async with aiofiles.open(file_path, mode="r", encoding="utf-8") as f:
+    async with aiofiles.open(file_path, encoding="utf-8") as f:
         content = await f.read()
 
     if old_str not in content:

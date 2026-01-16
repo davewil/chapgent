@@ -38,7 +38,7 @@ class SessionStorage:
         if not path.exists():
             return None
 
-        async with aiofiles.open(path, "r") as f:
+        async with aiofiles.open(path) as f:
             content = await f.read()
 
         try:
@@ -90,7 +90,7 @@ class SessionStorage:
 
             try:
                 # To avoid reading whole file, we could parse partial, but pydantic json validate reads all.
-                async with aiofiles.open(file_path, "r") as f:
+                async with aiofiles.open(file_path) as f:
                     content = await f.read()
 
                 session = Session.model_validate_json(content)
