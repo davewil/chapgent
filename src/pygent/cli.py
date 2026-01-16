@@ -5,6 +5,7 @@ import click
 
 from pygent.config.loader import load_config
 from pygent.core.agent import Agent
+from pygent.core.mock_provider import MockLLMProvider
 from pygent.core.permissions import PermissionManager
 from pygent.core.providers import LLMProvider
 from pygent.session.models import Session
@@ -23,7 +24,8 @@ def cli():
 @cli.command()
 @click.option("--session", "-s", help="Resume a session by ID")
 @click.option("--new", "-n", is_flag=True, help="Start a new session")
-def chat(session: str | None, new: bool):
+@click.option("--mock", "-m", is_flag=True, help="Use mock provider (no API key needed)")
+def chat(session: str | None, new: bool, mock: bool):
     """Start interactive chat session."""
 
     # 1. Load Config (Default for now)
@@ -31,7 +33,10 @@ def chat(session: str | None, new: bool):
     # TODO: Pass config to components
 
     # 2. Initialize Components
-    provider = LLMProvider(model="anthropic/claude-3-5-sonnet-20241022")  # Default hardcoded for MVP if not in config
+    if mock:
+        provider = MockLLMProvider(delay=0.3)  # Small delay for realistic feel
+    else:
+        provider = LLMProvider(model="anthropic/claude-3-5-sonnet-20241022")
     # Note: LLMProvider in specs/phase-1-mvp.md signature is (model, api_key).
     # We should check providers.py to match signature.
 
