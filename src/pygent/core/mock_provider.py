@@ -3,24 +3,28 @@
 import asyncio
 import re
 from dataclasses import dataclass
+from typing import Any
 
-from pygent.core.providers import LLMResponse, TextBlock, ToolUseBlock
+from pygent.core.providers import LLMProvider, LLMResponse, TextBlock, ToolUseBlock
+from pygent.tools.base import ToolDefinition
 
 
 @dataclass
-class MockLLMProvider:
+class MockLLMProvider(LLMProvider):
     """Mock provider that returns canned responses for TUI testing.
 
     Attributes:
         delay: Optional delay in seconds before responses (for realistic feel).
     """
 
-    delay: float = 0.0
+    def __init__(self, model: str = "mock", api_key: str | None = None, delay: float = 0.0) -> None:
+        super().__init__(model, api_key)
+        self.delay = delay
 
     async def complete(
         self,
-        messages: list[dict],
-        tools: list[dict],
+        messages: list[dict[str, Any]],
+        tools: list[ToolDefinition],
         max_tokens: int = 4096,
     ) -> LLMResponse:
         """Return canned responses based on user input patterns.
@@ -45,8 +49,7 @@ class MockLLMProvider:
                 content=[
                     TextBlock(
                         text=(
-                            "I've completed the requested operation. "
-                            "Is there anything else you'd like me to help with?"
+                            "I've completed the requested operation. Is there anything else you'd like me to help with?"
                         )
                     )
                 ],
@@ -61,29 +64,26 @@ class MockLLMProvider:
         # Return text response based on keywords
         return self._generate_text_response(user_message)
 
-    def _get_last_user_message(self, messages: list[dict]) -> str:
+    def _get_last_user_message(self, messages: list[dict[str, Any]]) -> str:
         """Extract the last user message content."""
         for msg in reversed(messages):
-            if msg.get("role") == "user" and isinstance(msg.get("content"), str):
-                return msg["content"].lower()
+            content = msg.get("content")
+            if msg.get("role") == "user" and isinstance(content, str):
+                return content.lower()
         return ""
 
-    def _is_tool_result(self, messages: list[dict]) -> bool:
+    def _is_tool_result(self, messages: list[dict[str, Any]]) -> bool:
         """Check if the last message is a tool result."""
         if messages:
             last = messages[-1]
             return last.get("role") == "tool"
         return False
 
-    def _check_tool_triggers(self, user_message: str, tools: list) -> LLMResponse | None:
+    def _check_tool_triggers(self, user_message: str, tools: list[ToolDefinition]) -> LLMResponse | None:
         """Check if user message should trigger a tool call."""
-        # Handle both dict and ToolDefinition objects
         tool_names = set()
         for t in tools:
-            if hasattr(t, "name"):
-                tool_names.add(t.name)
-            elif isinstance(t, dict):
-                tool_names.add(t.get("name", ""))
+            tool_names.add(t.name)
 
         # File reading triggers
         if re.search(r"\bread\b.*\bfile\b|\bshow\b.*\bfile\b|\bcat\b", user_message):

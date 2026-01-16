@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import aiofiles
 
@@ -70,7 +71,7 @@ async def list_files(path: str = ".", recursive: bool = False) -> str:
     return json.dumps(entries, indent=2)
 
 
-def _path_to_entry(path: Path, root: Path) -> dict:
+def _path_to_entry(path: Path, root: Path) -> dict[str, Any]:
     """Convert a path to a dictionary entry."""
     stats = path.stat()
     return {

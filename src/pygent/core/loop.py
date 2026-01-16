@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from pygent.core.providers import LLMResponse
@@ -55,7 +56,7 @@ def _convert_to_llm_messages(messages: list[Message]) -> list[dict[str, Any]]:
                     }
                 )
 
-        llm_msg = {"role": msg.role}
+        llm_msg: dict[str, Any] = {"role": msg.role}
         if content_buffer:
             llm_msg["content"] = "\n".join(content_buffer)
         if tool_calls and msg.role == "assistant":
@@ -77,27 +78,15 @@ async def conversation_loop(
         llm_msgs = _convert_to_llm_messages(messages)
 
         # Get available tools
-        # Note: registry.list_definitions returns list[dict], get returns ToolDefinition.
-        # We need list[ToolDefinition].
-        # Optimization: Agent could cache this or registry could return list of defs.
-        # But based on existing registry:
-        # registry.list_definitions() returns dicts.
-        # I should probably just iterate over private _tools or add a method.
-        # For now, I'll access the private _tools or iterate list.
-        # Let's fix this in registry or hack it here.
-        # HACK: Accessing _tools directly for speed/simplicity, assuming Agent has access.
-        # Or better, use registry keys.
         tool_list = []
-        # list_definitions returns dicts with name.
         for tool_info in agent.tools.list_definitions():
             tool_def = agent.tools.get(tool_info["name"])
             if tool_def:
                 tool_list.append(tool_def)
 
-        # Call LLM
         response: LLMResponse = await agent.provider.complete(
             messages=llm_msgs,
-            tools=tool_list,  # type: ignore
+            tools=tool_list,
         )
 
         # Process Response
@@ -116,7 +105,7 @@ async def conversation_loop(
 
         # Append assistant message
         if assistant_blocks:
-            messages.append(Message(role="assistant", content=assistant_blocks))
+            messages.append(Message(role="assistant", content=assistant_blocks, timestamp=datetime.now()))
 
         # If no tools, we are done
         if not tool_invocations:

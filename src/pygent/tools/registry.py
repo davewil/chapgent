@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
-from pygent.tools.base import ToolDefinition
+from pygent.tools.base import ToolDefinition, ToolFunction
 
 
 class ToolRegistry:
@@ -15,7 +14,7 @@ class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, ToolDefinition] = {}
 
-    def register(self, tool: ToolDefinition | Callable) -> None:
+    def register(self, tool: ToolDefinition | ToolFunction[Any, Any]) -> None:
         """Register a tool definition.
 
         Args:
@@ -23,10 +22,8 @@ class ToolRegistry:
         """
         if isinstance(tool, ToolDefinition):
             definition = tool
-        elif hasattr(tool, "_tool_definition"):
-            definition = tool._tool_definition  # type: ignore
         else:
-            raise ValueError(f"Invalid tool: {tool}. Must be ToolDefinition or decorated function.")
+            definition = tool._tool_definition
 
         self._tools[definition.name] = definition
 

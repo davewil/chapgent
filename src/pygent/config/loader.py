@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -26,7 +26,7 @@ def _load_toml(path: Path) -> dict[str, Any]:
         return {}
 
     with open(path, "rb") as f:
-        return tomllib.load(f)
+        return cast(dict[str, Any], tomllib.load(f))
 
 
 async def load_config(

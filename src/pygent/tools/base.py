@@ -5,12 +5,22 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import Enum
 from functools import wraps
-from typing import Any, ParamSpec, TypeVar
+from typing import Any, ParamSpec, Protocol, TypeVar, cast
 
 from pydantic import TypeAdapter
 
 P = ParamSpec("P")
 R = TypeVar("R")
+R_co = TypeVar("R_co", covariant=True)
+
+
+class ToolFunction(Protocol[P, R_co]):
+    """Protocol for functions decorated with @tool."""
+
+    _tool_definition: ToolDefinition
+
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> Awaitable[R_co]:
+        ...
 
 
 class ToolRisk(str, Enum):
@@ -79,13 +89,13 @@ def tool(
     name: str,
     description: str,
     risk: ToolRisk = ToolRisk.LOW,
-) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
+) -> Callable[[Callable[P, Awaitable[R]]], ToolFunction[P, R]]:
     """Decorator to register a function as an agent tool.
 
     Automatically generates JSON schema from type hints.
     """
 
-    def decorator(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
+    def decorator(func: Callable[P, Awaitable[R]]) -> ToolFunction[P, R]:
         # Generate schema
         schema = _generate_schema(func)
 
@@ -95,7 +105,7 @@ def tool(
             description=description,
             input_schema=schema,
             risk=risk,
-            function=func,  # type: ignore
+            function=func,
         )
 
         # Store definition on the function wrapper for registry discovery
@@ -103,7 +113,9 @@ def tool(
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             return await func(*args, **kwargs)
 
-        wrapper._tool_definition = definition
-        return wrapper
+        # Use Any cast to avoid mypy attribute error during assignment
+        wrapper_any = cast(Any, wrapper)
+        wrapper_any._tool_definition = definition
+        return cast(ToolFunction[P, R], wrapper)
 
     return decorator

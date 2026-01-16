@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from typing import Any
 
 import click
 
@@ -16,7 +17,7 @@ from pygent.tui.app import PygentApp
 
 @click.group()
 @click.version_option()
-def cli():
+def cli() -> None:
     """Pygent - AI-powered coding agent."""
     pass
 
@@ -25,7 +26,7 @@ def cli():
 @click.option("--session", "-s", help="Resume a session by ID")
 @click.option("--new", "-n", is_flag=True, help="Start a new session")
 @click.option("--mock", "-m", is_flag=True, help="Use mock provider (no API key needed)")
-def chat(session: str | None, new: bool, mock: bool):
+def chat(session: str | None, new: bool, mock: bool) -> None:
     """Start interactive chat session."""
 
     # 1. Load Config (Default for now)
@@ -33,6 +34,7 @@ def chat(session: str | None, new: bool, mock: bool):
     # TODO: Pass config to components
 
     # 2. Initialize Components
+    provider: LLMProvider
     if mock:
         provider = MockLLMProvider(delay=0.3)  # Small delay for realistic feel
     else:
@@ -70,7 +72,7 @@ def chat(session: str | None, new: bool, mock: bool):
     # We initialize the app first so we can use it in the permission callback
     app = PygentApp(storage=storage)
 
-    async def permission_callback(tool_name: str, risk: str, args: dict) -> bool:
+    async def permission_callback(tool_name: str, risk: str, args: dict[str, Any]) -> bool:
         # We need to run this on the main app loop
         # Since this callback is async, we can just await the app method
         return await app.get_permission(tool_name, args)
@@ -100,7 +102,7 @@ def chat(session: str | None, new: bool, mock: bool):
 
 
 @cli.command()
-def sessions():
+def sessions() -> None:
     """List saved sessions."""
     storage = SessionStorage()
     session_list = asyncio.run(storage.list_sessions())
@@ -118,7 +120,7 @@ def sessions():
 
 @cli.command()
 @click.argument("session_id")
-def resume(session_id: str):
+def resume(session_id: str) -> None:
     """Resume a specific session."""
     storage = SessionStorage()
     current_session = asyncio.run(storage.load(session_id))
@@ -133,7 +135,7 @@ def resume(session_id: str):
 
     app = PygentApp(storage=storage)
 
-    async def permission_callback(tool_name: str, risk: str, args: dict) -> bool:
+    async def permission_callback(tool_name: str, risk: str, args: dict[str, Any]) -> bool:
         return await app.get_permission(tool_name, args)
 
     permissions = PermissionManager(prompt_callback=permission_callback)
@@ -153,7 +155,7 @@ def resume(session_id: str):
 
 
 @cli.command()
-def config():
+def config() -> None:
     """Show current configuration."""
     settings = asyncio.run(load_config())
 

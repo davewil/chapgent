@@ -1,3 +1,5 @@
+from typing import Any
+
 from textual import work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
@@ -8,7 +10,7 @@ from pygent.session.storage import SessionStorage
 from pygent.tui.widgets import ConversationPanel, MessageInput, PermissionPrompt, ToolPanel
 
 
-class PygentApp(App):
+class PygentApp(App[None]):
     """Main Textual application for Pygent."""
 
     CSS_PATH = "styles.tcss"
@@ -20,7 +22,12 @@ class PygentApp(App):
         ("ctrl+p", "toggle_permissions", "Toggle Permissions"),
     ]
 
-    def __init__(self, agent: Agent | None = None, storage: SessionStorage | None = None, **kwargs):
+    def __init__(
+        self,
+        agent: Agent | None = None,
+        storage: SessionStorage | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self.agent = agent
         self.storage = storage
@@ -69,7 +76,7 @@ class PygentApp(App):
             elif event.type == "permission_denied":
                 self.query_one(ToolPanel).append_tool_result(str(event.tool_name), "Permission Denied")
 
-    async def get_permission(self, tool_name: str, args: dict) -> bool:
+    async def get_permission(self, tool_name: str, args: dict[str, Any]) -> bool:
         """Prompt user for permission to execute a tool."""
         # We need to wrap the screen push in a way that we can await the result
         # app.push_screen returns a awaitable that waits for dismissal

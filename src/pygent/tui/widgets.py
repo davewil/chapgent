@@ -1,3 +1,5 @@
+from typing import Any
+
 from textual.app import ComposeResult
 from textual.containers import Horizontal, VerticalScroll
 from textual.screen import ModalScreen
@@ -28,7 +30,7 @@ class ConversationPanel(Static):
 class ToolResultItem(Static):
     """Widget to display a tool result."""
 
-    def __init__(self, content: str, tool_name: str, result: str, **kwargs):
+    def __init__(self, content: str, tool_name: str, result: str, **kwargs: Any):
         super().__init__(content, **kwargs)
         self.tool_name = tool_name
         self.result = result
@@ -68,7 +70,7 @@ class MessageInput(Input):
 class PermissionPrompt(ModalScreen[bool]):
     """Modal to ask for permission."""
 
-    def __init__(self, tool_name: str, args: dict):
+    def __init__(self, tool_name: str, args: dict[str, Any]):
         super().__init__()
         self.tool_name = tool_name
         self.args = args

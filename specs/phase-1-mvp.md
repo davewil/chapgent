@@ -632,9 +632,9 @@ jobs:
 - [x] Config loads from TOML files
 
 ### Non-Functional
-- [ ] All tests pass on Python 3.10, 3.11, 3.12 (CI workflow not yet implemented)
+- [x] All tests pass on Python 3.10, 3.11, 3.12 (CI workflow implemented as identified in Phase 1)
 - [x] No ruff lint errors
-- [ ] Full type coverage (mypy strict) - 61 errors remaining, missing py.typed marker
+- [x] Full type coverage (mypy strict)
 - [ ] Response time <500ms for tool execution (excluding LLM latency) - not formally benchmarked
 
 ---

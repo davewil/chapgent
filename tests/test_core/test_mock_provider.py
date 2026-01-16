@@ -3,6 +3,7 @@
 import pytest
 from pygent.core.mock_provider import MockLLMProvider
 from pygent.core.providers import LLMResponse
+from pygent.tools.base import ToolDefinition, ToolRisk
 
 
 @pytest.fixture
@@ -15,10 +16,34 @@ def mock_provider():
 def tools():
     """Standard tools list."""
     return [
-        {"name": "read_file", "description": "Read a file"},
-        {"name": "list_files", "description": "List files"},
-        {"name": "edit_file", "description": "Edit a file"},
-        {"name": "shell", "description": "Run shell command"},
+        ToolDefinition(
+            name="read_file",
+            description="Read a file",
+            input_schema={"type": "object", "properties": {"path": {"type": "string"}}},
+            risk=ToolRisk.LOW,
+            function=lambda: None,  # type: ignore
+        ),
+        ToolDefinition(
+            name="list_files",
+            description="List files",
+            input_schema={"type": "object", "properties": {"path": {"type": "string"}}},
+            risk=ToolRisk.LOW,
+            function=lambda: None,  # type: ignore
+        ),
+        ToolDefinition(
+            name="edit_file",
+            description="Edit a file",
+            input_schema={"type": "object", "properties": {"path": {"type": "string"}}},
+            risk=ToolRisk.MEDIUM,
+            function=lambda: None,  # type: ignore
+        ),
+        ToolDefinition(
+            name="shell",
+            description="Run shell command",
+            input_schema={"type": "object", "properties": {"command": {"type": "string"}}},
+            risk=ToolRisk.HIGH,
+            function=lambda: None,  # type: ignore
+        ),
     ]
 
 
