@@ -183,3 +183,105 @@ async def grep_search(
         return json.dumps({"message": "No matches found", "results": []})
 
     return json.dumps({"count": len(results), "results": results}, indent=2)
+
+
+def _should_include_path(path: Path, base_path: Path) -> bool:
+    """Check if a path should be included (not hidden or in common ignore dirs).
+
+    Args:
+        path: The path to check.
+        base_path: The base directory (to get relative parts).
+
+    Returns:
+        True if the path should be included.
+    """
+    try:
+        rel_path = path.relative_to(base_path)
+        parts = rel_path.parts
+    except ValueError:
+        parts = path.parts
+
+    return not any(
+        part.startswith(".") or part in ("node_modules", "__pycache__", ".git", "venv", ".venv") for part in parts
+    )
+
+
+def _get_depth(path: Path, base_path: Path) -> int:
+    """Calculate the depth of a path relative to base.
+
+    Args:
+        path: The path to measure.
+        base_path: The base directory.
+
+    Returns:
+        Number of directory levels from base to path.
+    """
+    try:
+        rel_path = path.relative_to(base_path)
+        return len(rel_path.parts)
+    except ValueError:
+        return 0
+
+
+@tool(
+    name="find_files",
+    description="Find files and directories matching a glob pattern. Returns a list of matching paths.",
+    risk=ToolRisk.LOW,
+)
+async def find_files(
+    pattern: str,
+    path: str = ".",
+    max_depth: int | None = None,
+    file_type: str | None = None,
+) -> str:
+    """Find files by name pattern.
+
+    Args:
+        pattern: Glob pattern (e.g., "**/*.py", "test_*.py").
+        path: Base directory to search (default: current directory).
+        max_depth: Maximum directory depth to search.
+        file_type: Filter by type ("file" or "directory").
+
+    Returns:
+        JSON array of matching paths relative to the search path.
+    """
+    search_path = Path(path)
+    if not search_path.exists():
+        raise FileNotFoundError(f"Path not found: {path}")
+
+    if not search_path.is_dir():
+        raise NotADirectoryError(f"Path is not a directory: {path}")
+
+    matches: list[str] = []
+
+    for item in search_path.glob(pattern):
+        # Skip hidden files and common ignore directories
+        if not _should_include_path(item, search_path):
+            continue
+
+        # Check max_depth
+        if max_depth is not None:
+            depth = _get_depth(item, search_path)
+            if depth > max_depth:
+                continue
+
+        # Check file_type filter
+        if file_type == "file" and not item.is_file():
+            continue
+        if file_type == "directory" and not item.is_dir():
+            continue
+
+        # Store relative path for cleaner output
+        try:
+            rel_path = item.relative_to(search_path)
+            matches.append(str(rel_path))
+        except ValueError:
+            matches.append(str(item))
+
+    # Sort for consistent output
+    matches.sort()
+
+    if not matches:
+        return json.dumps({"message": "No files found", "files": []})
+
+    return json.dumps({"count": len(matches), "files": matches}, indent=2)

@@ -40,3 +40,12 @@
   - Returns structured JSON results with file, line number, content, and match text
   - Added 22 tests including unit tests and property-based tests (hypothesis)
   - Total: 127 tests pass, 97% coverage maintained
+2026-01-16: Implemented find_files tool (src/pygent/tools/search.py):
+  - Finds files matching glob patterns (e.g., "**/*.py", "test_*.py")
+  - Features: max_depth filtering, file_type filtering ("file" or "directory")
+  - Respects .gitignore-style exclusions (hidden dirs, node_modules, __pycache__, .git, venv)
+  - Returns sorted JSON results with relative paths
+  - Added helper functions _should_include_path and _get_depth for cleaner logic
+  - Added 20 tests: 13 unit tests + 4 helper function tests + 3 property-based tests (using uuid for isolation)
+  - Learned: Hypothesis property-based tests with tmp_path fixture need unique subdirectories per example (uuid.uuid4()) to avoid state pollution
+  - Total: 147 tests pass

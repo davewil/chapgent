@@ -1,4 +1,4 @@
-"""Tests for search tools (grep_search)."""
+"""Tests for search tools (grep_search, find_files)."""
 
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -7,9 +7,12 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from pygent.tools.search import (
+    _get_depth,
     _grep_with_python,
     _grep_with_ripgrep,
     _is_ripgrep_available,
+    _should_include_path,
+    find_files,
     grep_search,
 )
 
@@ -332,3 +335,339 @@ async def test_prop_grep_case_insensitive(tmp_path, word):
         assert data["count"] == 2
     else:
         assert data["count"] >= 1
+
+
+# =============================================================================
+# Unit tests for find_files
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_find_files_basic(tmp_path):
+    """Test basic file finding with glob pattern."""
+    (tmp_path / "file1.py").touch()
+    (tmp_path / "file2.py").touch()
+    (tmp_path / "file3.txt").touch()
+
+    result = await find_files("*.py", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 2
+    assert "file1.py" in data["files"]
+    assert "file2.py" in data["files"]
+    assert "file3.txt" not in data["files"]
+
+
+@pytest.mark.asyncio
+async def test_find_files_recursive(tmp_path):
+    """Test recursive file finding with **."""
+    (tmp_path / "root.py").touch()
+    subdir = tmp_path / "subdir"
+    subdir.mkdir()
+    (subdir / "nested.py").touch()
+
+    result = await find_files("**/*.py", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 2
+    files = data["files"]
+    assert any("root.py" in f for f in files)
+    assert any("nested.py" in f for f in files)
+
+
+@pytest.mark.asyncio
+async def test_find_files_no_matches(tmp_path):
+    """Test find_files when no files match."""
+    (tmp_path / "file.txt").touch()
+
+    result = await find_files("*.py", str(tmp_path))
+    data = json.loads(result)
+
+    assert data.get("message") == "No files found"
+    assert data["files"] == []
+
+
+@pytest.mark.asyncio
+async def test_find_files_path_not_found():
+    """Test find_files with non-existent path."""
+    with pytest.raises(FileNotFoundError, match="Path not found"):
+        await find_files("*.py", "/nonexistent/path")
+
+
+@pytest.mark.asyncio
+async def test_find_files_path_not_directory(tmp_path):
+    """Test find_files with a file path instead of directory."""
+    test_file = tmp_path / "file.txt"
+    test_file.touch()
+
+    with pytest.raises(NotADirectoryError, match="Path is not a directory"):
+        await find_files("*.py", str(test_file))
+
+
+@pytest.mark.asyncio
+async def test_find_files_file_type_filter_files(tmp_path):
+    """Test filtering to only files."""
+    (tmp_path / "file.py").touch()
+    subdir = tmp_path / "subdir"
+    subdir.mkdir()
+
+    result = await find_files("*", str(tmp_path), file_type="file")
+    data = json.loads(result)
+
+    assert "file.py" in data["files"]
+    assert "subdir" not in data["files"]
+
+
+@pytest.mark.asyncio
+async def test_find_files_file_type_filter_directories(tmp_path):
+    """Test filtering to only directories."""
+    (tmp_path / "file.py").touch()
+    subdir = tmp_path / "subdir"
+    subdir.mkdir()
+
+    result = await find_files("*", str(tmp_path), file_type="directory")
+    data = json.loads(result)
+
+    assert data["count"] == 1
+    assert "subdir" in data["files"]
+
+
+@pytest.mark.asyncio
+async def test_find_files_max_depth(tmp_path):
+    """Test max_depth filtering."""
+    (tmp_path / "root.py").touch()
+    level1 = tmp_path / "level1"
+    level1.mkdir()
+    (level1 / "nested1.py").touch()
+    level2 = level1 / "level2"
+    level2.mkdir()
+    (level2 / "deep.py").touch()
+
+    # max_depth=1 should find root.py and level1/nested1.py
+    result = await find_files("**/*.py", str(tmp_path), max_depth=2)
+    data = json.loads(result)
+
+    files = data["files"]
+    assert any("root.py" in f for f in files)
+    assert any("nested1.py" in f for f in files)
+    # deep.py is at depth 3 (level1/level2/deep.py)
+    assert not any("deep.py" in f for f in files)
+
+
+@pytest.mark.asyncio
+async def test_find_files_skips_hidden_dirs(tmp_path):
+    """Test that hidden directories are skipped."""
+    (tmp_path / "visible.py").touch()
+    hidden = tmp_path / ".hidden"
+    hidden.mkdir()
+    (hidden / "secret.py").touch()
+
+    result = await find_files("**/*.py", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 1
+    assert "visible.py" in data["files"]
+
+
+@pytest.mark.asyncio
+async def test_find_files_skips_node_modules(tmp_path):
+    """Test that node_modules is skipped."""
+    (tmp_path / "app.js").touch()
+    nm = tmp_path / "node_modules"
+    nm.mkdir()
+    (nm / "lib.js").touch()
+
+    result = await find_files("**/*.js", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 1
+    assert "app.js" in data["files"]
+
+
+@pytest.mark.asyncio
+async def test_find_files_skips_pycache(tmp_path):
+    """Test that __pycache__ is skipped."""
+    (tmp_path / "main.py").touch()
+    cache = tmp_path / "__pycache__"
+    cache.mkdir()
+    (cache / "main.cpython-310.pyc").touch()
+
+    result = await find_files("**/*", str(tmp_path), file_type="file")
+    data = json.loads(result)
+
+    assert data["count"] == 1
+    assert "main.py" in data["files"]
+
+
+@pytest.mark.asyncio
+async def test_find_files_sorted_output(tmp_path):
+    """Test that output is sorted alphabetically."""
+    (tmp_path / "z_file.py").touch()
+    (tmp_path / "a_file.py").touch()
+    (tmp_path / "m_file.py").touch()
+
+    result = await find_files("*.py", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["files"] == ["a_file.py", "m_file.py", "z_file.py"]
+
+
+# =============================================================================
+# Tests for helper functions
+# =============================================================================
+
+
+def test_should_include_path_normal(tmp_path):
+    """Test _should_include_path with normal path."""
+
+    file_path = tmp_path / "subdir" / "file.py"
+    assert _should_include_path(file_path, tmp_path) is True
+
+
+def test_should_include_path_hidden(tmp_path):
+    """Test _should_include_path with hidden directory."""
+
+    file_path = tmp_path / ".hidden" / "file.py"
+    assert _should_include_path(file_path, tmp_path) is False
+
+
+def test_should_include_path_node_modules(tmp_path):
+    """Test _should_include_path with node_modules."""
+
+    file_path = tmp_path / "node_modules" / "lib" / "index.js"
+    assert _should_include_path(file_path, tmp_path) is False
+
+
+def test_get_depth(tmp_path):
+    """Test _get_depth calculation."""
+
+    # Depth 1: file in root
+    assert _get_depth(tmp_path / "file.py", tmp_path) == 1
+
+    # Depth 2: file in subdir
+    assert _get_depth(tmp_path / "subdir" / "file.py", tmp_path) == 2
+
+    # Depth 3: file in nested subdirs
+    assert _get_depth(tmp_path / "a" / "b" / "file.py", tmp_path) == 3
+
+
+def test_get_depth_unrelated_path():
+    """Test _get_depth with unrelated path (ValueError case)."""
+    from pathlib import Path
+
+    # When paths are unrelated, should return 0
+    assert _get_depth(Path("/some/other/path"), Path("/completely/different")) == 0
+
+
+# =============================================================================
+# Property-based tests for find_files
+# =============================================================================
+
+
+@settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(
+    filenames=st.lists(
+        st.text(min_size=3, max_size=10, alphabet="abcdefghijklmnopqrstuvwxyz"),
+        min_size=1,
+        max_size=10,
+        unique=True,
+    ),
+)
+@pytest.mark.asyncio
+async def test_prop_find_files_finds_created_files(tmp_path, filenames):
+    """Property: find_files should find all created .py files."""
+    import shutil
+    import uuid
+
+    # Use unique subdirectory for each hypothesis example
+    test_dir = tmp_path / f"test_{uuid.uuid4().hex}"
+    test_dir.mkdir(exist_ok=True)
+
+    try:
+        # Create files
+        for name in filenames:
+            (test_dir / f"{name}.py").touch()
+
+        result = await find_files("*.py", str(test_dir))
+        data = json.loads(result)
+
+        assert data["count"] == len(filenames)
+        for name in filenames:
+            assert f"{name}.py" in data["files"]
+    finally:
+        # Clean up
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
+@settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(
+    py_count=st.integers(min_value=0, max_value=5),
+    txt_count=st.integers(min_value=0, max_value=5),
+)
+@pytest.mark.asyncio
+async def test_prop_find_files_filters_by_extension(tmp_path, py_count, txt_count):
+    """Property: find_files should only return files matching pattern."""
+    import shutil
+    import uuid
+
+    # Use unique subdirectory for each hypothesis example
+    test_dir = tmp_path / f"test_{uuid.uuid4().hex}"
+    test_dir.mkdir(exist_ok=True)
+
+    try:
+        # Create .py files
+        for i in range(py_count):
+            (test_dir / f"file{i}.py").touch()
+
+        # Create .txt files
+        for i in range(txt_count):
+            (test_dir / f"file{i}.txt").touch()
+
+        result = await find_files("*.py", str(test_dir))
+        data = json.loads(result)
+
+        if py_count == 0:
+            assert data.get("message") == "No files found"
+        else:
+            assert data["count"] == py_count
+            for f in data["files"]:
+                assert f.endswith(".py")
+    finally:
+        # Clean up
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
+@settings(max_examples=20, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(
+    depth=st.integers(min_value=1, max_value=4),
+)
+@pytest.mark.asyncio
+async def test_prop_find_files_respects_max_depth(tmp_path, depth):
+    """Property: find_files should respect max_depth setting."""
+    import shutil
+    import uuid
+
+    # Use unique subdirectory for each hypothesis example
+    test_dir = tmp_path / f"test_{uuid.uuid4().hex}"
+    test_dir.mkdir(exist_ok=True)
+
+    try:
+        # Create nested structure
+        current = test_dir
+        for i in range(5):
+            current = current / f"level{i}"
+            current.mkdir(exist_ok=True)
+            (current / f"file_at_{i + 1}.py").touch()
+
+        result = await find_files("**/*.py", str(test_dir), max_depth=depth)
+        data = json.loads(result)
+
+        # All returned files should be within max_depth
+        for f in data.get("files", []):
+            file_depth = f.count("/") + 1 if "/" in f else 1
+            # Allow for platform differences in path separators
+            file_depth = max(f.count("/"), f.count("\\")) + 1
+            assert file_depth <= depth
+    finally:
+        # Clean up
+        shutil.rmtree(test_dir, ignore_errors=True)
