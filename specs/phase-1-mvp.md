@@ -622,20 +622,20 @@ jobs:
 ## Acceptance Criteria
 
 ### Functional
-- [ ] User can start pygent and enter natural language prompts
-- [ ] Agent correctly calls tools based on user requests
-- [ ] File read/list operations work correctly
-- [ ] File edit operations perform exact string replacement
-- [ ] Shell commands execute with proper output capture
-- [ ] Permission prompts appear for MEDIUM/HIGH risk tools
-- [ ] Sessions persist between runs
-- [ ] Config loads from TOML files
+- [x] User can start pygent and enter natural language prompts
+- [x] Agent correctly calls tools based on user requests
+- [x] File read/list operations work correctly
+- [x] File edit operations perform exact string replacement
+- [x] Shell commands execute with proper output capture
+- [x] Permission prompts appear for MEDIUM/HIGH risk tools
+- [x] Sessions persist between runs
+- [x] Config loads from TOML files
 
 ### Non-Functional
-- [ ] All tests pass on Python 3.10, 3.11, 3.12
-- [ ] No ruff lint errors
-- [ ] Full type coverage (mypy strict)
-- [ ] Response time <500ms for tool execution (excluding LLM latency)
+- [ ] All tests pass on Python 3.10, 3.11, 3.12 (CI workflow not yet implemented)
+- [x] No ruff lint errors
+- [ ] Full type coverage (mypy strict) - 61 errors remaining, missing py.typed marker
+- [ ] Response time <500ms for tool execution (excluding LLM latency) - not formally benchmarked
 
 ---
 
