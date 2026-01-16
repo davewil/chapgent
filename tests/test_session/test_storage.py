@@ -113,3 +113,56 @@ async def test_persistence_across_instances(tmp_path):
     storage2 = SessionStorage(storage_dir=tmp_path)
     loaded = await storage2.load("s1")
     assert loaded == s1
+
+
+@pytest.mark.asyncio
+async def test_load_corrupted_file_raises(storage, tmp_path):
+    """Verify that loading a corrupted session file raises an exception."""
+    from pydantic import ValidationError
+
+    # Write invalid JSON to a session file
+    corrupted_path = tmp_path / "corrupted.json"
+    corrupted_path.write_text("{ invalid json content")
+
+    with pytest.raises((ValidationError, ValueError)):
+        await storage.load("corrupted")
+
+
+@pytest.mark.asyncio
+async def test_delete_nonexistent_returns_false(storage):
+    """Verify that deleting a non-existent session returns False."""
+    result = await storage.delete("does-not-exist")
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_skips_index_json(storage, tmp_path):
+    """Verify that list_sessions ignores index.json file."""
+    # Create a valid session
+    s1 = Session(id="s1")
+    await storage.save(s1)
+
+    # Create an index.json file (should be ignored)
+    index_path = tmp_path / "index.json"
+    index_path.write_text('{"sessions": []}')
+
+    sessions = await storage.list_sessions()
+    assert len(sessions) == 1
+    assert sessions[0].id == "s1"
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_skips_corrupted_files(storage, tmp_path):
+    """Verify that list_sessions skips corrupted session files gracefully."""
+    # Create a valid session
+    s1 = Session(id="s1")
+    await storage.save(s1)
+
+    # Create a corrupted JSON file
+    corrupted_path = tmp_path / "corrupted.json"
+    corrupted_path.write_text("{ invalid json }")
+
+    sessions = await storage.list_sessions()
+    # Should only return the valid session
+    assert len(sessions) == 1
+    assert sessions[0].id == "s1"
