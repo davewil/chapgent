@@ -13,3 +13,4 @@
 2026-01-16: Implemented Basic TUI Structure (app.py, widgets.py, styles.tcss).
 2026-01-16: Added TUI tests (test_app.py) verifying startup and key bindings.
 2026-01-16: Integrated TUI with Agent Loop. Updated PygentApp to handle agent events and added integration tests (test_integration.py). Verified all tests pass.
+2026-01-16: Implemented CLI entry point (src/pygent/cli.py) with chat command. Wired up to Agent/TUI. Verified with units tests.
