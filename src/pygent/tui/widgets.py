@@ -7,16 +7,18 @@ from textual.widgets import Button, Input, Pretty, Static
 class ConversationPanel(Static):
     """Display for the conversation history."""
 
+    BORDER_TITLE = "💬 Conversation"
+
     def compose(self) -> ComposeResult:
         yield VerticalScroll(id="conversation-messages")
 
     def append_user_message(self, content: str) -> None:
         """Append a user message to the conversation."""
-        self.query_one("#conversation-messages").mount(Static(f"User: {content}", classes="user-message"))
+        self.query_one("#conversation-messages").mount(Static(f"👤 You: {content}", classes="user-message"))
 
     def append_assistant_message(self, content: str) -> None:
         """Append an assistant message to the conversation."""
-        self.query_one("#conversation-messages").mount(Static(f"Agent: {content}", classes="agent-message"))
+        self.query_one("#conversation-messages").mount(Static(f"🤖 Agent: {content}", classes="agent-message"))
 
 
 class ToolResultItem(Static):
@@ -31,16 +33,20 @@ class ToolResultItem(Static):
 class ToolPanel(Static):
     """Display for tool activity."""
 
+    BORDER_TITLE = "🔧 Tools"
+
     def compose(self) -> ComposeResult:
         yield VerticalScroll(id="tool-output")
 
     def append_tool_call(self, tool_name: str, tool_id: str) -> None:
         """Append a tool call to the panel."""
-        self.query_one("#tool-output").mount(Static(f"Running: {tool_name} ({tool_id})", classes="tool-call"))
+        self.query_one("#tool-output").mount(Static(f"⏳ Running: {tool_name}", classes="tool-call"))
 
     def append_tool_result(self, tool_name: str, result: str) -> None:
         """Append a tool result to the panel."""
-        item = ToolResultItem(f"Result ({tool_name}): {result}", tool_name, result, classes="tool-result")
+        # Truncate long results for display
+        display_result = result[:200] + "..." if len(result) > 200 else result
+        item = ToolResultItem(f"✅ {tool_name}: {display_result}", tool_name, result, classes="tool-result")
         self.query_one("#tool-output").mount(item)
 
 

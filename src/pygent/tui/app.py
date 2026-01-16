@@ -1,5 +1,6 @@
 from textual import work
 from textual.app import App, ComposeResult
+from textual.containers import Horizontal
 from textual.widgets import Footer, Header
 
 from pygent.core.agent import Agent
@@ -27,8 +28,9 @@ class PygentApp(App):
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
         yield Header()
-        yield ConversationPanel()
-        yield ToolPanel()
+        with Horizontal(id="main-content"):
+            yield ConversationPanel()
+            yield ToolPanel()
         yield MessageInput(id="input")
         yield Footer()
 

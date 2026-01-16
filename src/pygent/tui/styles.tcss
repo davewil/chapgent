@@ -1,43 +1,37 @@
-/* Textual CSS for pygent */
+/* Textual CSS for pygent - A modern chat interface */
 
+/* Main screen uses vertical dock layout */
 Screen {
-    layout: grid;
-    grid-size: 2 3;
-    grid-rows: auto 1fr auto;
-    grid-columns: 2fr 1fr;
+    background: $surface-darken-1;
 }
 
 Header {
     dock: top;
-    column-span: 2;
+    background: $primary-darken-2;
+    color: $text;
+    text-style: bold;
 }
 
 Footer {
     dock: bottom;
-    column-span: 2;
+    background: $primary-darken-3;
 }
 
+/* Main content area - horizontal split */
+#main-content {
+    layout: horizontal;
+    height: 1fr;
+}
+
+/* Conversation panel - left side (larger) */
 ConversationPanel {
-    column-span: 1;
-    row-span: 1;
-    border: solid $primary;
-    background: $surface;
+    width: 2fr;
     height: 100%;
-}
-
-ToolPanel {
-    column-span: 1;
-    row-span: 1;
-    border: solid $secondary;
+    border: round $primary;
+    border-title-color: $primary-lighten-2;
+    border-title-style: bold;
     background: $surface;
-    height: 100%;
-}
-
-MessageInput {
-    column-span: 2;
-    height: auto;
-    dock: bottom;
-    margin: 1 1;
+    padding: 1 2;
 }
 
 #conversation-messages {
@@ -45,7 +39,91 @@ MessageInput {
     scrollbar-size: 1 1;
 }
 
+.user-message {
+    background: $primary-darken-2;
+    color: $text;
+    padding: 1 2;
+    margin: 1 0;
+    border: round $primary;
+}
+
+.agent-message {
+    background: $secondary-darken-2;
+    color: $text;
+    padding: 1 2;
+    margin: 1 0;
+    border: round $secondary;
+}
+
+/* Tool panel - right side (smaller) */
+ToolPanel {
+    width: 1fr;
+    height: 100%;
+    border: round $secondary;
+    border-title-color: $secondary-lighten-2;
+    border-title-style: bold;
+    background: $surface;
+    padding: 1 2;
+}
+
 #tool-output {
     height: 100%;
     scrollbar-size: 1 1;
+}
+
+.tool-call {
+    background: $warning-darken-2;
+    color: $text;
+    padding: 0 1;
+    margin: 0 0 1 0;
+}
+
+.tool-result {
+    background: $success-darken-2;
+    color: $text;
+    padding: 0 1;
+    margin: 0 0 1 0;
+}
+
+/* Input area at bottom */
+MessageInput {
+    dock: bottom;
+    height: 3;
+    margin: 1 2;
+    border: round $accent;
+    background: $surface-lighten-1;
+    padding: 0 1;
+}
+
+MessageInput:focus {
+    border: round $primary;
+}
+
+/* Permission prompt modal */
+PermissionPrompt {
+    align: center middle;
+}
+
+PermissionPrompt > Static {
+    background: $surface;
+    padding: 1 2;
+    border: round $warning;
+    width: 60;
+}
+
+PermissionPrompt > Pretty {
+    background: $surface-darken-1;
+    padding: 1 2;
+    width: 60;
+    max-height: 10;
+}
+
+PermissionPrompt .buttons {
+    width: 60;
+    align: center middle;
+    padding: 1;
+}
+
+PermissionPrompt Button {
+    margin: 0 2;
 }
