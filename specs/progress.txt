@@ -9,3 +9,4 @@
 2026-01-16: Implemented Configuration System (settings.py, loader.py) with priority merging (Project > User > Defaults) and verified with tests.
 2026-01-16: Implemented shell tool (src/pygent/tools/shell.py) with async execution, timeout handling, and output capturing.
 2026-01-16: Added comprehensive unit and property-based tests for shell tool (tests/test_tools/test_shell.py).
+2026-01-16: Implemented Session Storage (storage.py) with async I/O. Added SessionSummary model. Verified with unit and property-based tests.

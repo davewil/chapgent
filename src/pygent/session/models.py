@@ -49,3 +49,12 @@ class Session(BaseModel):
     tool_history: list[ToolInvocation] = []
     working_directory: str = "."
     metadata: dict[str, Any] = {}
+
+
+class SessionSummary(BaseModel):
+    id: str
+    created_at: datetime
+    updated_at: datetime
+    message_count: int
+    working_directory: str
+    metadata: dict[str, Any]
