@@ -59,6 +59,39 @@ async def test_shell_timeout():
         assert mock_process.kill.called
 
 
+@pytest.mark.asyncio
+async def test_shell_timeout_process_already_finished():
+    """Test timeout when process exits before kill() is called.
+
+    Covers the ProcessLookupError exception path (lines 36-37).
+    """
+    mock_process = AsyncMock()
+    mock_process.kill = MagicMock(side_effect=ProcessLookupError)
+    mock_process.returncode = None  # Triggers the kill path
+
+    with (
+        patch("asyncio.create_subprocess_shell", return_value=mock_process),
+        patch("asyncio.wait_for", side_effect=asyncio.TimeoutError),
+    ):
+        result = await shell(command="sleep 10", timeout=1)
+
+        assert "timed out" in result
+        mock_process.kill.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_shell_subprocess_creation_error():
+    """Test handling when subprocess creation fails entirely.
+
+    Covers the generic exception handler (lines 53-54).
+    """
+    with patch("asyncio.create_subprocess_shell", side_effect=OSError("No shell available")):
+        result = await shell(command="any_command")
+
+        assert "Error executing command" in result
+        assert "No shell available" in result
+
+
 @given(st.text(min_size=1), st.text(), st.text(), st.integers(min_value=0, max_value=127))
 @pytest.mark.asyncio
 async def test_shell_property_output_handling(command, stdout_content, stderr_content, exit_code):
