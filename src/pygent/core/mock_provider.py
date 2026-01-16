@@ -69,7 +69,7 @@ class MockLLMProvider(LLMProvider):
         for msg in reversed(messages):
             content = msg.get("content")
             if msg.get("role") == "user" and isinstance(content, str):
-                return content.lower()
+                return content
         return ""
 
     def _is_tool_result(self, messages: list[dict[str, Any]]) -> bool:
@@ -86,7 +86,7 @@ class MockLLMProvider(LLMProvider):
             tool_names.add(t.name)
 
         # File reading triggers
-        if re.search(r"\bread\b.*\bfile\b|\bshow\b.*\bfile\b|\bcat\b", user_message):
+        if re.search(r"\bread\b.*\bfile\b|\bshow\b.*\bfile\b|\bcat\b", user_message, re.IGNORECASE):
             if "read_file" in tool_names:
                 # Try to extract filename
                 filename = self._extract_filename(user_message) or "README.md"
@@ -99,7 +99,7 @@ class MockLLMProvider(LLMProvider):
                 )
 
         # Directory listing triggers
-        if re.search(r"\blist\b.*\b(files?|director(y|ies))\b|\bls\b|\bdir\b", user_message):
+        if re.search(r"\blist\b.*\b(files?|director(y|ies))\b|\bls\b|\bdir\b", user_message, re.IGNORECASE):
             if "list_files" in tool_names:
                 path = self._extract_path(user_message) or "."
                 return LLMResponse(
@@ -111,7 +111,7 @@ class MockLLMProvider(LLMProvider):
                 )
 
         # Edit file triggers
-        if re.search(r"\bedit\b|\bchange\b|\bmodify\b|\bupdate\b", user_message):
+        if re.search(r"\bedit\b|\bchange\b|\bmodify\b|\bupdate\b", user_message, re.IGNORECASE):
             if "edit_file" in tool_names:
                 return LLMResponse(
                     content=[
@@ -127,7 +127,7 @@ class MockLLMProvider(LLMProvider):
                 )
 
         # Shell triggers
-        if re.search(r"\brun\b|\bexecute\b|\bshell\b|\bcommand\b", user_message):
+        if re.search(r"\brun\b|\bexecute\b|\bshell\b|\bcommand\b", user_message, re.IGNORECASE):
             if "shell" in tool_names:
                 # Try to extract command
                 cmd = self._extract_command(user_message) or "echo 'Hello from mock shell'"
@@ -144,7 +144,7 @@ class MockLLMProvider(LLMProvider):
     def _generate_text_response(self, user_message: str) -> LLMResponse:
         """Generate a text response based on user message."""
         # Greeting patterns
-        if re.search(r"\b(hello|hi|hey|greetings)\b", user_message):
+        if re.search(r"\b(hello|hi|hey|greetings)\b", user_message, re.IGNORECASE):
             return LLMResponse(
                 content=[
                     TextBlock(
@@ -162,7 +162,7 @@ What would you like me to help you with today?"""
             )
 
         # Help patterns
-        if re.search(r"\bhelp\b|\bwhat can you do\b|\bcapabilities\b", user_message):
+        if re.search(r"\bhelp\b|\bwhat can you do\b|\bcapabilities\b", user_message, re.IGNORECASE):
             return LLMResponse(
                 content=[
                     TextBlock(

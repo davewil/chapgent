@@ -24,3 +24,4 @@
 2026-01-16: Refactored CLI (src/pygent/cli.py) to consolidate initialization logic in _init_agent_and_app, reducing code duplication and ensuring consistent settings integration.
 2026-01-16: Implemented missing TUI actions (PygentApp.action_new_session, PygentApp.action_toggle_permissions) and integrated TUI settings (theme, show_tool_panel).
 2026-01-16: Added comprehensive integration tests for TUI actions (tests/test_integration/test_tui_actions.py) and fixed regressions in existing tests (test_cli.py, test_config.py, test_integration.py). Verified all 86 tests pass.
+2026-01-16: Fixed case sensitivity in MockLLMProvider. Filenames now preserve original case for tool calls on Unix systems, while command triggers remains case-insensitive. Updated and added tests to verify fix.

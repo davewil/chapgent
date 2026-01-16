@@ -94,7 +94,19 @@ class TestMockProviderToolCalls:
         tool_calls = [b for b in response.content if hasattr(b, "name")]
         assert len(tool_calls) >= 1
         assert tool_calls[0].name == "read_file"
-        assert "readme.md" in tool_calls[0].input.get("path", "").lower()
+        assert tool_calls[0].input.get("path") == "README.md"
+
+    @pytest.mark.asyncio
+    async def test_case_insensitive_trigger(self, mock_provider, tools):
+        """Test that triggers are case-insensitive but filenames preserve case."""
+        messages = [{"role": "user", "content": "READ FILE MyFile.Txt"}]
+        response = await mock_provider.complete(messages, tools)
+
+        assert response.stop_reason == "tool_use"
+        tool_calls = [b for b in response.content if hasattr(b, "name")]
+        assert len(tool_calls) >= 1
+        assert tool_calls[0].name == "read_file"
+        assert tool_calls[0].input.get("path") == "MyFile.Txt"
 
     @pytest.mark.asyncio
     async def test_list_files_trigger(self, mock_provider, tools):
