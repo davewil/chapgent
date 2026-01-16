@@ -1,3 +1,4 @@
+# mypy: warn_unused_ignores=False
 import sys
 from pathlib import Path
 from typing import Any, cast
@@ -26,7 +27,8 @@ def _load_toml(path: Path) -> dict[str, Any]:
         return {}
 
     with open(path, "rb") as f:
-        return cast(dict[str, Any], tomllib.load(f))
+        data: Any = tomllib.load(f)
+        return cast(dict[str, Any], data)
 
 
 async def load_config(
