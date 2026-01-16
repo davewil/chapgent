@@ -3,6 +3,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import Footer, Header
 
 from pygent.core.agent import Agent
+from pygent.session.storage import SessionStorage
 from pygent.tui.widgets import ConversationPanel, MessageInput, PermissionPrompt, ToolPanel
 
 
@@ -18,9 +19,10 @@ class PygentApp(App):
         ("ctrl+p", "toggle_permissions", "Toggle Permissions"),
     ]
 
-    def __init__(self, agent: Agent | None = None, **kwargs):
+    def __init__(self, agent: Agent | None = None, storage: SessionStorage | None = None, **kwargs):
         super().__init__(**kwargs)
         self.agent = agent
+        self.storage = storage
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -75,6 +77,18 @@ class PygentApp(App):
         # Actually push_screen returns a Future-like object or we can use wait_for_return?
         # Textual's standard pattern for modal result is:
         return await self.push_screen_wait(PermissionPrompt(tool_name, args))
+
+    async def action_save_session(self) -> None:
+        """Save the current session."""
+        if not self.agent or not self.storage:
+            self.notify("Error: No agent or storage available to save.", severity="error")
+            return
+
+        try:
+            await self.storage.save(self.agent.session)
+            self.notify(f"Session {self.agent.session.id} saved.", severity="information")
+        except Exception as e:
+            self.notify(f"Error saving session: {e}", severity="error")
 
 
 if __name__ == "__main__":

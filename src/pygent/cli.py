@@ -62,7 +62,7 @@ def chat(session: str | None, new: bool):
 
     # 6. Initialize App & Wiring
     # We initialize the app first so we can use it in the permission callback
-    app = PygentApp()
+    app = PygentApp(storage=storage)
 
     async def permission_callback(tool_name: str, risk: str, args: dict) -> bool:
         # We need to run this on the main app loop
