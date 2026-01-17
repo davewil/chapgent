@@ -9,7 +9,13 @@ from pygent.config.settings import Settings
 from pygent.core.agent import Agent
 from pygent.session.models import Session
 from pygent.session.storage import SessionStorage
-from pygent.tui.widgets import ConversationPanel, MessageInput, PermissionPrompt, ToolPanel
+from pygent.tui.widgets import (
+    ConversationPanel,
+    MessageInput,
+    PermissionPrompt,
+    SessionsSidebar,
+    ToolPanel,
+)
 
 
 class PygentApp(App[None]):
@@ -22,6 +28,7 @@ class PygentApp(App[None]):
         ("ctrl+n", "new_session", "New Session"),
         ("ctrl+s", "save_session", "Save"),
         ("ctrl+p", "toggle_permissions", "Toggle Permissions"),
+        ("ctrl+b", "toggle_sidebar", "Toggle Sidebar"),
     ]
 
     def __init__(
@@ -40,17 +47,22 @@ class PygentApp(App[None]):
         """Create child widgets for the app."""
         yield Header()
         with Horizontal(id="main-content"):
+            if self.settings.tui.show_sidebar:
+                yield SessionsSidebar()
             yield ConversationPanel()
             if self.settings.tui.show_tool_panel:
                 yield ToolPanel()
         yield MessageInput(id="input")
         yield Footer()
 
-    def on_mount(self) -> None:
+    async def on_mount(self) -> None:
         """Handle app mount."""
         self.theme = self.settings.tui.theme
         if self.agent:
             self.title = f"Pygent - {self.agent.session.id[:8]}"
+
+        # Populate sessions sidebar if available
+        await self._populate_sessions_sidebar()
 
     async def on_input_submitted(self, message: MessageInput.Submitted) -> None:
         """Handle input submission."""
@@ -133,6 +145,18 @@ class PygentApp(App[None]):
         except Exception:
             pass  # ToolPanel might not be present
 
+        # Update sidebar - add new session and mark it active
+        try:
+            sidebar = self.query_one(SessionsSidebar)
+            sidebar.add_session(
+                session_id=new_session.id,
+                message_count=0,
+                is_active=True,
+            )
+            sidebar.update_active_session(new_session.id)
+        except Exception:
+            pass  # Sidebar might not be present
+
         self.title = f"Pygent - {new_session.id[:8]}"
         self.notify("Started new session.")
 
@@ -145,6 +169,43 @@ class PygentApp(App[None]):
         pm.session_override = not pm.session_override
         state = "ENABLED (Auto-approve MEDIUM risk)" if pm.session_override else "DISABLED (Always prompt)"
         self.notify(f"Permission Override: {state}", severity="information")
+
+    def action_toggle_sidebar(self) -> None:
+        """Toggle the sessions sidebar visibility."""
+        try:
+            sidebar = self.query_one(SessionsSidebar)
+            sidebar.display = not sidebar.display
+            state = "shown" if sidebar.display else "hidden"
+            self.notify(f"Sessions sidebar {state}.", severity="information")
+        except Exception:
+            # Sidebar not present in compose (show_sidebar=False in settings)
+            self.notify("Sessions sidebar not available.", severity="warning")
+
+    async def _populate_sessions_sidebar(self) -> None:
+        """Populate the sessions sidebar with saved sessions."""
+        if not self.storage or not self.settings.tui.show_sidebar:
+            return
+
+        try:
+            sidebar = self.query_one(SessionsSidebar)
+        except Exception:
+            return  # Sidebar not present
+
+        # Get current session ID if available
+        current_session_id = self.agent.session.id if self.agent else None
+
+        # Load and display sessions
+        try:
+            sessions = await self.storage.list_sessions()
+            for session_summary in sessions:
+                is_active = session_summary.id == current_session_id
+                sidebar.add_session(
+                    session_id=session_summary.id,
+                    message_count=session_summary.message_count,
+                    is_active=is_active,
+                )
+        except Exception as e:
+            self.notify(f"Error loading sessions: {e}", severity="warning")
 
 
 if __name__ == "__main__":

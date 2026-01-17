@@ -433,3 +433,36 @@
   - Learned: Return type Any for mock factory functions avoids mypy type mismatch errors in tests
   - Parallel Tool Execution section of Phase 3 now complete
   - Total: 703 tests pass
+2026-01-17: Implemented Session Sidebar (src/pygent/tui/widgets.py, app.py):
+  - Added SessionItem widget: Displays individual session with truncated ID, message count, active indicator
+    * Supports is_active flag with CSS class "session-active" for highlighting
+    * Display format: "▸ abcdefgh… (5 msgs)" for active, "  abcdefgh… (5 msgs)" for inactive
+  - Added SessionsSidebar widget: Collapsible sidebar showing saved sessions
+    * Features: List sessions, highlight active session, click to switch (planned)
+    * Methods: add_session(), update_active_session(), clear(), get_session_count()
+    * Uses VerticalScroll for long session lists
+  - Added show_sidebar setting to TUISettings (default: True)
+  - Integrated into PygentApp:
+    * Sidebar appears on left side of layout (before ConversationPanel)
+    * Populated from SessionStorage on mount with current session highlighted
+    * Updates when new session is created (ctrl+n)
+  - Added ctrl+b keybinding to toggle sidebar visibility
+    * Uses widget.display property for showing/hiding
+    * Graceful handling when sidebar not present in settings
+  - Added CSS styling (styles.tcss):
+    * Fixed width (24 chars), accent-colored border
+    * Hover effect for session items
+    * Active session highlighted with primary color and bold text
+  - Learned: Textual CSS doesn't support "cursor: pointer" property
+  - Learned: DOM manipulation in Textual is asynchronous - need await pilot.pause() after remove() calls in tests
+  - Learned: Use query(WidgetClass).remove() pattern for clearing specific widget types
+  - Learned: When updating active session, check if session exists first to avoid deactivating all items
+  - Added 28 tests:
+    * TestSessionItem: 4 tests for widget creation and properties
+    * TestSessionsSidebar: 7 tests for sidebar methods (compose, add, update_active, clear, count)
+    * TestPygentAppSidebarIntegration: 6 tests for app integration (default, disabled, toggle, keybinding)
+    * TestSidebarWithStorage: 3 tests for storage integration (populate, highlight, no storage)
+    * TestPropertyBased: 4 property-based tests using hypothesis
+    * TestEdgeCases: 4 edge case tests (empty ID, long ID, special chars, nonexistent session)
+  - Session Sidebar section of Phase 3 now complete
+  - Total: 731 tests pass

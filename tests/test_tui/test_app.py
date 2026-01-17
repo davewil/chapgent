@@ -2,7 +2,7 @@ import pytest
 from textual.widgets import Footer, Header
 
 from pygent.tui.app import PygentApp
-from pygent.tui.widgets import ConversationPanel, MessageInput, ToolPanel
+from pygent.tui.widgets import ConversationPanel, MessageInput, SessionsSidebar, ToolPanel
 
 
 @pytest.mark.asyncio
@@ -16,6 +16,7 @@ async def test_app_startup():
         # Check for main layout components
         assert app.query_one(Header)
         assert app.query_one(Footer)
+        assert app.query_one(SessionsSidebar)
         assert app.query_one(ConversationPanel)
         assert app.query_one(ToolPanel)
         assert app.query_one(MessageInput)

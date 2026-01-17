@@ -16,6 +16,7 @@ class PermissionSettings(BaseModel):
 class TUISettings(BaseModel):
     theme: str = "textual-dark"
     show_tool_panel: bool = True
+    show_sidebar: bool = True
 
 
 class SystemPromptSettings(BaseModel):

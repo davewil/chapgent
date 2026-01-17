@@ -55,6 +55,38 @@ ConversationPanel {
     border: round $secondary;
 }
 
+/* Sessions sidebar - left side (fixed width) */
+SessionsSidebar {
+    width: 24;
+    height: 100%;
+    border: round $accent;
+    border-title-color: $accent-lighten-2;
+    border-title-style: bold;
+    background: $surface;
+    padding: 1 1;
+}
+
+#sessions-list {
+    height: 100%;
+    scrollbar-size: 1 1;
+}
+
+.session-item {
+    padding: 0 1;
+    margin: 0 0 1 0;
+    background: $surface-darken-1;
+}
+
+.session-item:hover {
+    background: $primary-darken-2;
+}
+
+.session-item.session-active {
+    background: $primary-darken-1;
+    color: $text;
+    text-style: bold;
+}
+
 /* Tool panel - right side (smaller) */
 ToolPanel {
     width: 1fr;
