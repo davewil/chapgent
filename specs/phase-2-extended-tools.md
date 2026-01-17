@@ -583,7 +583,7 @@ async def test_find_definition_python(tmp_path):
 - [x] Find files works with glob patterns and depth limits
 - [x] Find definition locates symbol definitions across multiple languages
 - [x] File operations (create, delete, move, copy) work correctly
-- [ ] Tools categorized and discoverable
+- [x] Tools categorized and discoverable
 
 ### Non-Functional
 - [x] Git operations complete in <1s for typical repos

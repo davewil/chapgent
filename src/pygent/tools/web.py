@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 
-from pygent.tools.base import ToolRisk, tool
+from pygent.tools.base import ToolCategory, ToolRisk, tool
 
 # Default limits
 DEFAULT_TIMEOUT = 30
@@ -154,6 +154,7 @@ def _upgrade_to_https(url: str) -> str:
     name="web_fetch",
     description="Fetch content from a URL (HTTPS enforced)",
     risk=ToolRisk.HIGH,
+    category=ToolCategory.WEB,
 )
 async def web_fetch(
     url: str,

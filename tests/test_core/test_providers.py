@@ -1,9 +1,8 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from pygent.core.providers import LLMProvider, LLMResponse, TextBlock
-from pygent.tools.base import ToolDefinition, ToolRisk
+from pygent.tools.base import ToolCategory, ToolDefinition, ToolRisk
 
 
 @pytest.fixture
@@ -56,6 +55,7 @@ async def test_complete_with_tools_formatting():
             description="A test tool",
             input_schema={"type": "object"},
             risk=ToolRisk.LOW,
+            category=ToolCategory.SHELL,
             function=dummy_tool,
         )
 

@@ -1,6 +1,5 @@
 import pytest
-
-from pygent.tools.base import ToolDefinition, ToolRisk, tool
+from pygent.tools.base import ToolCategory, ToolDefinition, ToolRisk, tool
 
 
 @pytest.mark.asyncio
@@ -58,3 +57,61 @@ async def test_tool_execution():
 
     result = await exec_tool("hello")
     assert result == "HELLO"
+
+
+class TestToolCategory:
+    """Tests for ToolCategory enum."""
+
+    def test_category_values(self):
+        """Test that all expected categories exist."""
+        assert ToolCategory.FILESYSTEM == "filesystem"
+        assert ToolCategory.GIT == "git"
+        assert ToolCategory.SEARCH == "search"
+        assert ToolCategory.WEB == "web"
+        assert ToolCategory.SHELL == "shell"
+
+    def test_category_from_string(self):
+        """Test creating category from string value."""
+        assert ToolCategory("filesystem") == ToolCategory.FILESYSTEM
+        assert ToolCategory("git") == ToolCategory.GIT
+        assert ToolCategory("search") == ToolCategory.SEARCH
+        assert ToolCategory("web") == ToolCategory.WEB
+        assert ToolCategory("shell") == ToolCategory.SHELL
+
+    def test_category_invalid_string(self):
+        """Test that invalid string raises ValueError."""
+        with pytest.raises(ValueError):
+            ToolCategory("invalid")
+
+
+@pytest.mark.asyncio
+async def test_tool_decorator_with_category():
+    """Test tool decorator with category parameter."""
+
+    @tool(
+        name="categorized_tool",
+        description="A categorized tool",
+        risk=ToolRisk.MEDIUM,
+        category=ToolCategory.FILESYSTEM,
+    )
+    async def categorized_tool(path: str) -> str:
+        return path
+
+    definition: ToolDefinition = categorized_tool._tool_definition
+
+    assert definition.name == "categorized_tool"
+    assert definition.risk == ToolRisk.MEDIUM
+    assert definition.category == ToolCategory.FILESYSTEM
+
+
+@pytest.mark.asyncio
+async def test_tool_decorator_default_category():
+    """Test that default category is SHELL."""
+
+    @tool(name="default_cat_tool", description="No explicit category")
+    async def default_cat_tool(x: int) -> int:
+        return x
+
+    definition: ToolDefinition = default_cat_tool._tool_definition
+
+    assert definition.category == ToolCategory.SHELL

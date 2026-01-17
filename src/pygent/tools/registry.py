@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pygent.tools.base import ToolDefinition, ToolFunction
+from pygent.tools.base import ToolCategory, ToolDefinition, ToolFunction
 
 
 class ToolRegistry:
@@ -52,3 +52,31 @@ class ToolRegistry:
             }
             for tool in self._tools.values()
         ]
+
+    def list_all(self) -> list[ToolDefinition]:
+        """List all registered tools.
+
+        Returns:
+            A list of all tool definitions.
+        """
+        return list(self._tools.values())
+
+    def list_by_category(self, category: ToolCategory) -> list[ToolDefinition]:
+        """List tools in a specific category.
+
+        Args:
+            category: The category to filter by.
+
+        Returns:
+            A list of tool definitions in the specified category.
+        """
+        return [tool for tool in self._tools.values() if tool.category == category]
+
+    def get_categories(self) -> list[ToolCategory]:
+        """Get all categories that have at least one tool.
+
+        Returns:
+            A sorted list of categories with registered tools.
+        """
+        categories = {tool.category for tool in self._tools.values()}
+        return sorted(categories, key=lambda c: c.value)

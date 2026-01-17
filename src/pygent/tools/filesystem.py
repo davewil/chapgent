@@ -8,13 +8,14 @@ from typing import Any
 
 import aiofiles
 
-from pygent.tools.base import ToolRisk, tool
+from pygent.tools.base import ToolCategory, ToolRisk, tool
 
 
 @tool(
     name="read_file",
     description="Read the contents of a file at the given path",
     risk=ToolRisk.LOW,
+    category=ToolCategory.FILESYSTEM,
 )
 async def read_file(path: str) -> str:
     """Read file contents.
@@ -44,6 +45,7 @@ async def read_file(path: str) -> str:
     name="list_files",
     description="List files and directories at the given path",
     risk=ToolRisk.LOW,
+    category=ToolCategory.FILESYSTEM,
 )
 async def list_files(path: str = ".", recursive: bool = False) -> str:
     """List directory contents.
@@ -89,6 +91,7 @@ def _path_to_entry(path: Path, root: Path) -> dict[str, Any]:
     name="edit_file",
     description="Edit a file by replacing old_str with new_str",
     risk=ToolRisk.MEDIUM,
+    category=ToolCategory.FILESYSTEM,
 )
 async def edit_file(path: str, old_str: str, new_str: str) -> str:
     """Edit file via string replacement.
@@ -123,6 +126,7 @@ async def edit_file(path: str, old_str: str, new_str: str) -> str:
     name="create_file",
     description="Create a new file with content",
     risk=ToolRisk.MEDIUM,
+    category=ToolCategory.FILESYSTEM,
 )
 async def create_file(path: str, content: str) -> str:
     """Create a new file.
@@ -155,6 +159,7 @@ async def create_file(path: str, content: str) -> str:
     name="delete_file",
     description="Delete a file",
     risk=ToolRisk.HIGH,
+    category=ToolCategory.FILESYSTEM,
 )
 async def delete_file(path: str) -> str:
     """Delete a file.
@@ -189,6 +194,7 @@ async def delete_file(path: str) -> str:
     name="move_file",
     description="Move or rename a file",
     risk=ToolRisk.MEDIUM,
+    category=ToolCategory.FILESYSTEM,
 )
 async def move_file(source: str, destination: str) -> str:
     """Move or rename a file.
@@ -229,6 +235,7 @@ async def move_file(source: str, destination: str) -> str:
     name="copy_file",
     description="Copy a file to a new location",
     risk=ToolRisk.MEDIUM,
+    category=ToolCategory.FILESYSTEM,
 )
 async def copy_file(source: str, destination: str) -> str:
     """Copy a file.

@@ -137,3 +137,33 @@
   - Learned: httpx.AsyncClient context manager pattern with patch requires mocking __aenter__ and __aexit__
   - Web Tools section of Phase 2 now complete
   - Total: 296 tests pass, 96% overall coverage, web.py at 97% coverage
+2026-01-17: Implemented Tool Categories & Discovery (Phase 2 Complete):
+  - Added ToolCategory enum to tools/base.py: FILESYSTEM, GIT, SEARCH, WEB, SHELL
+  - Updated ToolDefinition dataclass to include category field
+  - Updated @tool decorator to accept category parameter (default: SHELL)
+  - Added categories to all existing tools:
+    * FILESYSTEM: read_file, list_files, edit_file, create_file, delete_file, move_file, copy_file
+    * GIT: git_status, git_diff, git_log, git_branch, git_add, git_commit, git_checkout, git_push, git_pull
+    * SEARCH: grep_search, find_files, find_definition
+    * SHELL: shell
+    * WEB: web_fetch
+  - Updated ToolRegistry with new methods:
+    * list_all(): Returns all registered tools
+    * list_by_category(category): Returns tools in a specific category
+    * get_categories(): Returns sorted list of categories with registered tools
+  - Added CLI 'tools' command (pygent tools):
+    * Lists all tools grouped by category
+    * Supports --category/-c filter option
+    * Shows risk level indicators [LOW], [MEDIUM], [HIGH]
+  - Added _create_full_registry() helper in cli.py to register all tools
+  - Added 17 new tests:
+    * ToolCategory enum tests (values, from_string, invalid)
+    * @tool decorator category tests (explicit and default)
+    * ToolRegistry category method tests (list_all, list_by_category, get_categories)
+    * CLI tools command tests (list all, filter by category, invalid category, risk levels)
+  - Learned: Adding a new field to dataclass requires updating all existing instantiations in tests
+  - Learned: str Enum provides automatic string conversion and validation
+  - Learned: CLI commands can use raise ... from None to suppress exception chaining
+  - Tool Categories & Discovery section of Phase 2 now complete
+  - Phase 2 all acceptance criteria now met
+  - Total: 313 tests pass

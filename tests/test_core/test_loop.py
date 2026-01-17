@@ -5,14 +5,13 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-
 from pygent.core.agent import Agent
 from pygent.core.loop import _convert_to_llm_messages, conversation_loop
 from pygent.core.providers import LLMResponse
 from pygent.core.providers import TextBlock as ProvTextBlock
 from pygent.core.providers import ToolUseBlock as ProvToolUseBlock
 from pygent.session.models import Message, Session, TextBlock, ToolResultBlock, ToolUseBlock
-from pygent.tools.base import ToolDefinition, ToolRisk
+from pygent.tools.base import ToolCategory, ToolDefinition, ToolRisk
 
 
 @pytest.fixture
@@ -119,6 +118,7 @@ class TestLoopToolExecution:
             description="A tool that fails",
             input_schema={},
             risk=ToolRisk.LOW,
+            category=ToolCategory.SHELL,
             function=failing_tool,
         )
         mock_registry.get.return_value = tool_def
@@ -159,6 +159,7 @@ class TestLoopToolExecution:
             description="Crashes",
             input_schema={},
             risk=ToolRisk.LOW,
+            category=ToolCategory.SHELL,
             function=crash_tool,
         )
         mock_registry.get.return_value = tool_def
@@ -201,6 +202,7 @@ class TestLoopPermissionDenied:
             description="A risky tool",
             input_schema={},
             risk=ToolRisk.HIGH,
+            category=ToolCategory.SHELL,
             function=dummy_tool,
         )
         mock_registry.get.return_value = tool_def
@@ -241,7 +243,12 @@ class TestLoopPermissionDenied:
             return "result"
 
         tool_def = ToolDefinition(
-            name="tool", description="desc", input_schema={}, risk=ToolRisk.HIGH, function=some_tool
+            name="tool",
+            description="desc",
+            input_schema={},
+            risk=ToolRisk.HIGH,
+            category=ToolCategory.SHELL,
+            function=some_tool,
         )
         mock_registry.get.return_value = tool_def
         mock_registry.list_definitions.return_value = [{"name": "tool"}]
@@ -347,8 +354,8 @@ class TestLoopMultipleToolCalls:
 
         def get_tool(name):
             tools = {
-                "tool_a": ToolDefinition("tool_a", "Tool A", {}, ToolRisk.LOW, tool_a),
-                "tool_b": ToolDefinition("tool_b", "Tool B", {}, ToolRisk.LOW, tool_b),
+                "tool_a": ToolDefinition("tool_a", "Tool A", {}, ToolRisk.LOW, ToolCategory.SHELL, tool_a),
+                "tool_b": ToolDefinition("tool_b", "Tool B", {}, ToolRisk.LOW, ToolCategory.SHELL, tool_b),
             }
             return tools.get(name)
 
@@ -432,7 +439,7 @@ class TestLoopPropertyBased:
         async def good_tool(**kwargs):
             return "ok"
 
-        tool_def = ToolDefinition("good_tool", "desc", {}, ToolRisk.LOW, good_tool)
+        tool_def = ToolDefinition("good_tool", "desc", {}, ToolRisk.LOW, ToolCategory.SHELL, good_tool)
 
         mock_registry = MagicMock()
         mock_registry.list_definitions.return_value = [{"name": "good_tool"}]

@@ -1,12 +1,13 @@
 import asyncio
 
-from pygent.tools.base import ToolRisk, tool
+from pygent.tools.base import ToolCategory, ToolRisk, tool
 
 
 @tool(
     name="shell",
     description="Execute a shell command and return output. Returns stdout and stderr combined.",
     risk=ToolRisk.HIGH,
+    category=ToolCategory.SHELL,
 )
 async def shell(command: str, timeout: int = 60) -> str:
     """Execute shell command.

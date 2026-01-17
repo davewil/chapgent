@@ -19,13 +19,24 @@ class ToolFunction(Protocol[P, R_co]):
 
     _tool_definition: ToolDefinition
 
-    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> Awaitable[R_co]: ...
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> Awaitable[R_co]:
+        ...
 
 
 class ToolRisk(str, Enum):
     LOW = "low"  # Auto-approved
     MEDIUM = "medium"  # Prompts unless session override
     HIGH = "high"  # Always prompts
+
+
+class ToolCategory(str, Enum):
+    """Categories for organizing tools."""
+
+    FILESYSTEM = "filesystem"
+    GIT = "git"
+    SEARCH = "search"
+    WEB = "web"
+    SHELL = "shell"
 
 
 @dataclass
@@ -37,6 +48,7 @@ class ToolDefinition:
         description: What the tool does (shown to LLM).
         input_schema: JSON Schema for parameters.
         risk: Risk level for permission system.
+        category: Tool category for organization.
         function: The actual async function to execute.
     """
 
@@ -44,6 +56,7 @@ class ToolDefinition:
     description: str
     input_schema: dict[str, Any]
     risk: ToolRisk
+    category: ToolCategory
     function: Callable[..., Awaitable[Any]]
 
 
@@ -88,10 +101,17 @@ def tool(
     name: str,
     description: str,
     risk: ToolRisk = ToolRisk.LOW,
+    category: ToolCategory = ToolCategory.SHELL,
 ) -> Callable[[Callable[P, Awaitable[R]]], ToolFunction[P, R]]:
     """Decorator to register a function as an agent tool.
 
     Automatically generates JSON schema from type hints.
+
+    Args:
+        name: Unique tool identifier.
+        description: What the tool does (shown to LLM).
+        risk: Risk level for permission system.
+        category: Tool category for organization.
     """
 
     def decorator(func: Callable[P, Awaitable[R]]) -> ToolFunction[P, R]:
@@ -104,6 +124,7 @@ def tool(
             description=description,
             input_schema=schema,
             risk=risk,
+            category=category,
             function=func,
         )
 

@@ -2,7 +2,6 @@ from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 from click.testing import CliRunner
-
 from pygent.cli import cli
 from pygent.session.models import SessionSummary
 
@@ -180,3 +179,79 @@ def test_cli_resume_not_found_raises(
     result = runner.invoke(cli, ["resume", "nonexistent"])
     assert result.exit_code == 1
     assert "not found" in result.output.lower()
+
+
+class TestToolsCommand:
+    """Tests for the tools CLI command."""
+
+    def test_tools_list_all(self):
+        """Test listing all tools without category filter."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["tools"])
+
+        assert result.exit_code == 0
+        # Should show category headers
+        assert "Filesystem Tools" in result.output
+        assert "Git Tools" in result.output
+        assert "Search Tools" in result.output
+        assert "Shell Tools" in result.output
+        assert "Web Tools" in result.output
+        # Should show some tools
+        assert "read_file" in result.output
+        assert "git_status" in result.output
+        assert "grep_search" in result.output
+        assert "shell" in result.output
+        assert "web_fetch" in result.output
+
+    def test_tools_filter_by_category_git(self):
+        """Test filtering tools by git category."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["tools", "--category", "git"])
+
+        assert result.exit_code == 0
+        assert "Git Tools" in result.output
+        assert "git_status" in result.output
+        assert "git_diff" in result.output
+        assert "git_commit" in result.output
+        # Should NOT show other categories
+        assert "Filesystem Tools" not in result.output
+        assert "read_file" not in result.output
+
+    def test_tools_filter_by_category_filesystem(self):
+        """Test filtering tools by filesystem category."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["tools", "-c", "filesystem"])
+
+        assert result.exit_code == 0
+        assert "Filesystem Tools" in result.output
+        assert "read_file" in result.output
+        assert "edit_file" in result.output
+        # Should NOT show git tools
+        assert "Git Tools" not in result.output
+        assert "git_status" not in result.output
+
+    def test_tools_invalid_category(self):
+        """Test that invalid category raises error."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["tools", "--category", "invalid"])
+
+        assert result.exit_code == 1
+        assert "Invalid category" in result.output
+
+    def test_tools_shows_risk_levels(self):
+        """Test that risk levels are displayed."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["tools"])
+
+        assert result.exit_code == 0
+        assert "[LOW]" in result.output
+        assert "[MEDIUM]" in result.output
+        assert "[HIGH]" in result.output
+
+    def test_tools_command_in_help(self):
+        """Test that tools command is listed in help."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["--help"])
+
+        assert result.exit_code == 0
+        assert "tools" in result.output

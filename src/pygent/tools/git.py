@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 
-from pygent.tools.base import ToolRisk, tool
+from pygent.tools.base import ToolCategory, ToolRisk, tool
 
 
 class GitError(Exception):
@@ -64,6 +64,7 @@ async def _check_git_repo(cwd: str | None = None) -> None:
     name="git_status",
     description="Show the working tree status (modified, staged, untracked files)",
     risk=ToolRisk.LOW,
+    category=ToolCategory.GIT,
 )
 async def git_status(cwd: str | None = None) -> str:
     """Get git repository status.
@@ -92,6 +93,7 @@ async def git_status(cwd: str | None = None) -> str:
     name="git_diff",
     description="Show changes between commits, commit and working tree, etc.",
     risk=ToolRisk.LOW,
+    category=ToolCategory.GIT,
 )
 async def git_diff(
     path: str | None = None,
@@ -139,6 +141,7 @@ async def git_diff(
     name="git_log",
     description="Show commit history",
     risk=ToolRisk.LOW,
+    category=ToolCategory.GIT,
 )
 async def git_log(
     count: int = 10,
@@ -183,6 +186,7 @@ async def git_log(
     name="git_branch",
     description="List, create, or delete branches",
     risk=ToolRisk.LOW,
+    category=ToolCategory.GIT,
 )
 async def git_branch(
     name: str | None = None,
@@ -232,6 +236,7 @@ async def git_branch(
     name="git_add",
     description="Stage files for commit",
     risk=ToolRisk.MEDIUM,
+    category=ToolCategory.GIT,
 )
 async def git_add(
     paths: list[str],
@@ -268,6 +273,7 @@ async def git_add(
     name="git_commit",
     description="Create a new commit with staged changes",
     risk=ToolRisk.MEDIUM,
+    category=ToolCategory.GIT,
 )
 async def git_commit(
     message: str,
@@ -302,6 +308,7 @@ async def git_commit(
     name="git_checkout",
     description="Switch branches or restore files",
     risk=ToolRisk.MEDIUM,
+    category=ToolCategory.GIT,
 )
 async def git_checkout(
     branch: str | None = None,
@@ -354,6 +361,7 @@ async def git_checkout(
     name="git_push",
     description="Push commits to remote repository",
     risk=ToolRisk.HIGH,
+    category=ToolCategory.GIT,
 )
 async def git_push(
     remote: str = "origin",
@@ -401,6 +409,7 @@ async def git_push(
     name="git_pull",
     description="Fetch and integrate changes from remote",
     risk=ToolRisk.MEDIUM,
+    category=ToolCategory.GIT,
 )
 async def git_pull(
     remote: str = "origin",

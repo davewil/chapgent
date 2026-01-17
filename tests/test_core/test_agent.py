@@ -1,14 +1,13 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from pygent.core.agent import Agent
 from pygent.core.loop import conversation_loop
 from pygent.core.providers import LLMResponse
 from pygent.core.providers import TextBlock as ProvTextBlock
 from pygent.core.providers import ToolUseBlock as ProvToolUseBlock
 from pygent.session.models import Message, Session, ToolUseBlock
-from pygent.tools.base import ToolDefinition, ToolRisk
+from pygent.tools.base import ToolCategory, ToolDefinition, ToolRisk
 
 
 @pytest.fixture
@@ -27,7 +26,12 @@ def mock_registry():
         return "Tool Result"
 
     tool_def = ToolDefinition(
-        name="test_tool", description="desc", input_schema={}, risk=ToolRisk.LOW, function=dummy_tool
+        name="test_tool",
+        description="desc",
+        input_schema={},
+        risk=ToolRisk.LOW,
+        category=ToolCategory.SHELL,
+        function=dummy_tool,
     )
     registry.get.return_value = tool_def
     return registry

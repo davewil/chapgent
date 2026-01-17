@@ -3,7 +3,7 @@
 import pytest
 from pygent.core.mock_provider import MockLLMProvider
 from pygent.core.providers import LLMResponse
-from pygent.tools.base import ToolDefinition, ToolRisk
+from pygent.tools.base import ToolCategory, ToolDefinition, ToolRisk
 
 
 @pytest.fixture
@@ -21,6 +21,7 @@ def tools():
             description="Read a file",
             input_schema={"type": "object", "properties": {"path": {"type": "string"}}},
             risk=ToolRisk.LOW,
+            category=ToolCategory.FILESYSTEM,
             function=lambda: None,  # type: ignore
         ),
         ToolDefinition(
@@ -28,6 +29,7 @@ def tools():
             description="List files",
             input_schema={"type": "object", "properties": {"path": {"type": "string"}}},
             risk=ToolRisk.LOW,
+            category=ToolCategory.FILESYSTEM,
             function=lambda: None,  # type: ignore
         ),
         ToolDefinition(
@@ -35,6 +37,7 @@ def tools():
             description="Edit a file",
             input_schema={"type": "object", "properties": {"path": {"type": "string"}}},
             risk=ToolRisk.MEDIUM,
+            category=ToolCategory.FILESYSTEM,
             function=lambda: None,  # type: ignore
         ),
         ToolDefinition(
@@ -42,6 +45,7 @@ def tools():
             description="Run shell command",
             input_schema={"type": "object", "properties": {"command": {"type": "string"}}},
             risk=ToolRisk.HIGH,
+            category=ToolCategory.SHELL,
             function=lambda: None,  # type: ignore
         ),
     ]
