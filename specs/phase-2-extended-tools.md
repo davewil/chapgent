@@ -582,7 +582,7 @@ async def test_find_definition_python(tmp_path):
 - [x] Grep search finds patterns accurately
 - [x] Find files works with glob patterns and depth limits
 - [x] Find definition locates symbol definitions across multiple languages
-- [ ] File operations (create, delete, move, copy) work correctly
+- [x] File operations (create, delete, move, copy) work correctly
 - [ ] Tools categorized and discoverable
 
 ### Non-Functional
@@ -600,9 +600,11 @@ async def test_find_definition_python(tmp_path):
    - find_files with glob patterns ✅
    - find_definition for common languages ✅ (supports Python, JavaScript, TypeScript, Go, Rust, Java, C, C++)
 
-2. **Additional File Tools** (2 days)
-   - create_file, delete_file
-   - move_file, copy_file
+2. **Additional File Tools** ✅ COMPLETE
+   - create_file ✅ (creates file with content, auto-creates parent directories, FileExistsError if exists)
+   - delete_file ✅ (deletes file, HIGH risk, directories not allowed)
+   - move_file ✅ (move/rename, auto-creates parent directories)
+   - copy_file ✅ (copies with shutil.copy2, preserves metadata, auto-creates parent directories)
 
 3. **Git Tools** (4-5 days)
    - Read-only tools first (status, diff, log, branch)

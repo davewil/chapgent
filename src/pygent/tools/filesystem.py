@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -115,3 +117,149 @@ async def edit_file(path: str, old_str: str, new_str: str) -> str:
         await f.write(new_content)
 
     return f"Successfully replaced occurrences in {path}"
+
+
+@tool(
+    name="create_file",
+    description="Create a new file with content",
+    risk=ToolRisk.MEDIUM,
+)
+async def create_file(path: str, content: str) -> str:
+    """Create a new file.
+
+    Args:
+        path: Path for the new file.
+        content: Initial file content.
+
+    Returns:
+        Success message.
+
+    Raises:
+        FileExistsError: If file already exists.
+    """
+    file_path = Path(path)
+
+    if file_path.exists():
+        raise FileExistsError(f"File already exists: {path}")
+
+    # Ensure parent directory exists
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+
+    async with aiofiles.open(file_path, mode="w", encoding="utf-8") as f:
+        await f.write(content)
+
+    return f"Successfully created file: {path}"
+
+
+@tool(
+    name="delete_file",
+    description="Delete a file",
+    risk=ToolRisk.HIGH,
+)
+async def delete_file(path: str) -> str:
+    """Delete a file.
+
+    Args:
+        path: Path to file to delete.
+
+    Returns:
+        Confirmation message.
+
+    Raises:
+        FileNotFoundError: If file doesn't exist.
+        IsADirectoryError: If path is a directory.
+
+    Note:
+        Directories are not deleted (use shell for rmdir).
+    """
+    file_path = Path(path)
+
+    if not file_path.exists():
+        raise FileNotFoundError(f"File not found: {path}")
+
+    if file_path.is_dir():
+        raise IsADirectoryError(f"Cannot delete directory with delete_file: {path}")
+
+    await asyncio.to_thread(file_path.unlink)
+
+    return f"Successfully deleted file: {path}"
+
+
+@tool(
+    name="move_file",
+    description="Move or rename a file",
+    risk=ToolRisk.MEDIUM,
+)
+async def move_file(source: str, destination: str) -> str:
+    """Move or rename a file.
+
+    Args:
+        source: Current file path.
+        destination: New file path.
+
+    Returns:
+        Confirmation message.
+
+    Raises:
+        FileNotFoundError: If source file doesn't exist.
+        IsADirectoryError: If source is a directory.
+        FileExistsError: If destination already exists.
+    """
+    src_path = Path(source)
+    dst_path = Path(destination)
+
+    if not src_path.exists():
+        raise FileNotFoundError(f"Source file not found: {source}")
+
+    if src_path.is_dir():
+        raise IsADirectoryError(f"Cannot move directory with move_file: {source}")
+
+    if dst_path.exists():
+        raise FileExistsError(f"Destination already exists: {destination}")
+
+    # Ensure parent directory exists
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+
+    await asyncio.to_thread(shutil.move, str(src_path), str(dst_path))
+
+    return f"Successfully moved {source} to {destination}"
+
+
+@tool(
+    name="copy_file",
+    description="Copy a file to a new location",
+    risk=ToolRisk.MEDIUM,
+)
+async def copy_file(source: str, destination: str) -> str:
+    """Copy a file.
+
+    Args:
+        source: Source file path.
+        destination: Destination file path.
+
+    Returns:
+        Confirmation message.
+
+    Raises:
+        FileNotFoundError: If source file doesn't exist.
+        IsADirectoryError: If source is a directory.
+        FileExistsError: If destination already exists.
+    """
+    src_path = Path(source)
+    dst_path = Path(destination)
+
+    if not src_path.exists():
+        raise FileNotFoundError(f"Source file not found: {source}")
+
+    if src_path.is_dir():
+        raise IsADirectoryError(f"Cannot copy directory with copy_file: {source}")
+
+    if dst_path.exists():
+        raise FileExistsError(f"Destination already exists: {destination}")
+
+    # Ensure parent directory exists
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+
+    await asyncio.to_thread(shutil.copy2, str(src_path), str(dst_path))
+
+    return f"Successfully copied {source} to {destination}"

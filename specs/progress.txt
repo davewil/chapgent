@@ -71,3 +71,25 @@
   - Learned: Breaking pattern match on first match per line prevents duplicate reports
   - Search Tools section of Phase 2 now complete (grep_search, find_files, find_definition)
   - Total: 179 tests pass
+2026-01-17: Implemented Additional File Tools (src/pygent/tools/filesystem.py):
+  - create_file: Creates new file with content, auto-creates parent directories via Path.mkdir(parents=True)
+    * Raises FileExistsError if file already exists (intentional, prevents accidental overwrites)
+    * Risk level: MEDIUM
+  - delete_file: Deletes a single file (HIGH risk)
+    * Uses asyncio.to_thread(path.unlink) for non-blocking deletion
+    * Raises IsADirectoryError if path is directory (use shell for rmdir)
+    * Raises FileNotFoundError if file doesn't exist
+  - move_file: Moves or renames a file (MEDIUM risk)
+    * Uses shutil.move wrapped in asyncio.to_thread for async operation
+    * Auto-creates parent directories for destination
+    * Raises FileExistsError if destination exists (prevents accidental overwrites)
+  - copy_file: Copies a file to new location (MEDIUM risk)
+    * Uses shutil.copy2 (preserves metadata: timestamps, permissions)
+    * Auto-creates parent directories for destination
+    * Raises FileExistsError if destination exists
+  - Added 18 unit tests covering: basic operations, nested paths, error cases (not found, is directory, already exists)
+  - Added 4 property-based tests using hypothesis: create/delete/move/copy roundtrip verification
+  - Learned: Use uuid.uuid4() subdirectories in property tests to avoid state pollution between examples
+  - Learned: shutil.copy2 preserves metadata unlike shutil.copy; use asyncio.to_thread to wrap blocking shutil calls
+  - Additional File Tools section of Phase 2 now complete
+  - Total: 201 tests pass
