@@ -563,12 +563,13 @@ async def test_session_sidebar():
 - [ ] Session sidebar shows all sessions
 - [x] Project context correctly detected
 - [x] .gitignore respected in file operations
+- [x] Error recovery provides intelligent suggestions for common errors
 
 ### Non-Functional
 - [ ] Tool caching reduces redundant operations
 - [ ] TUI remains responsive during long operations
 - [ ] Memory usage stays bounded with large sessions
-- [x] All features have test coverage (Context Awareness: 92 tests, Test Runner: 72 tests, Scaffolding: 77 tests)
+- [x] All features have test coverage (Context Awareness: 92 tests, Test Runner: 72 tests, Scaffolding: 77 tests, Error Recovery: 43 tests)
 
 ---
 

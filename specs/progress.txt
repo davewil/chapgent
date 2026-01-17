@@ -300,3 +300,47 @@
   - Learned: Component templates need project type context to generate correct paths
   - Project Scaffolding section of Phase 3 now complete
   - Total: 554 tests pass
+2026-01-17: Implemented Error Recovery System (src/pygent/core/recovery.py):
+  - Added ErrorType enum with 15 error classifications:
+    * FILE_NOT_FOUND, PERMISSION_DENIED, IS_A_DIRECTORY, FILE_EXISTS, NOT_A_DIRECTORY
+    * GIT_NOT_A_REPOSITORY, GIT_CONFLICT, GIT_NO_REMOTE
+    * MODULE_NOT_FOUND, TIMEOUT, CONNECTION_ERROR
+    * SYNTAX_ERROR, JSON_DECODE_ERROR, INVALID_ARGUMENT, UNKNOWN
+  - Implemented RecoveryAction dataclass:
+    * error_type: Classified error type
+    * should_retry: Whether tool should be retried
+    * suggestions: List of actionable suggestions
+    * modified_args: Optional modified arguments for retry
+    * similar_paths: Similar paths found (for file errors)
+  - Implemented ERROR_PATTERNS dictionary for exception class matching:
+    * Maps exception class names to error types and suggestions
+    * Includes patterns for FileNotFoundError, PermissionError, TimeoutError, etc.
+    * Supports httpx exceptions (ConnectError, TimeoutException)
+    * Includes auto_retry flag for retryable errors (Timeout, Connection)
+  - Implemented MESSAGE_PATTERNS list for error message regex matching:
+    * Catches errors that don't match by exception class
+    * Extracts module names from "No module named" messages
+    * Detects git repository issues, connection errors, timeouts
+  - Implemented ErrorRecovery class:
+    * handle_tool_error(): Analyzes exceptions and returns RecoveryAction
+    * _resolve_exception_class(): Resolves exception classes from strings (handles dotted names)
+    * _contextualize_suggestions(): Adds context-specific information to suggestions
+    * add_error_pattern(): Register custom exception patterns
+    * add_message_pattern(): Register custom message regex patterns
+  - Priority matching: Exception class > Parent classes > Message patterns > Unknown
+  - Added 43 tests:
+    * TestErrorType: 3 tests for enum values and structure
+    * TestRecoveryAction: 4 tests for dataclass defaults and fields
+    * TestErrorPatterns: 6 tests for ERROR_PATTERNS structure and content
+    * TestMessagePatterns: 4 tests for MESSAGE_PATTERNS structure
+    * TestErrorRecovery: 14 tests for handle_tool_error with various exceptions
+    * TestErrorRecoveryCustomPatterns: 3 tests for custom pattern registration
+    * TestContextualization: 2 tests for suggestion contextualization
+    * TestPropertyBased: 3 property-based tests using hypothesis
+    * TestIntegration: 4 integration tests for real tool error scenarios
+  - Learned: In Python 3.11+, str(StrEnum.VALUE) returns "EnumName.VALUE", use .value for the string
+  - Learned: hypothesis st.characters() requires valid Unicode categories, not arbitrary characters
+  - Learned: __builtins__ can be a dict or module depending on context, need to handle both
+  - Learned: Use vars(__builtins__) to convert module to dict for consistent access
+  - Error Recovery section of Phase 3 now complete
+  - Total: 597 tests pass
