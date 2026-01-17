@@ -49,3 +49,25 @@
   - Added 20 tests: 13 unit tests + 4 helper function tests + 3 property-based tests (using uuid for isolation)
   - Learned: Hypothesis property-based tests with tmp_path fixture need unique subdirectories per example (uuid.uuid4()) to avoid state pollution
   - Total: 147 tests pass
+2026-01-16: Implemented find_definition tool (src/pygent/tools/search.py):
+  - Finds symbol definitions (functions, classes, interfaces, types, variables) in code
+  - Multi-language support: Python, JavaScript, TypeScript, Go, Rust, Java, C, C++
+  - Features: automatic language detection from file extensions, explicit language hint option
+  - Uses regex patterns per language to match common definition styles:
+    * Python: def, async def, class, variable assignment, typed variable
+    * JavaScript: function, async function, class, const/let/var, exports
+    * TypeScript: all JS patterns plus interface, type
+    * Go: func, type struct/interface, var/const
+    * Rust: fn, pub fn, async fn, struct, enum, trait, type alias, const/static/let
+    * Java: public/private/protected methods, class, interface, enum
+    * C/C++: functions, macros, typedefs, structs, enums, classes, namespaces
+  - Added _DEFINITION_PATTERNS dict with language-specific regex templates
+  - Added _EXTENSION_TO_LANGUAGE mapping for auto-detection
+  - Added helper functions: _get_language_from_path, _compile_patterns_for_symbol
+  - Symbols with regex special characters are escaped via re.escape()
+  - Returns JSON with file, line number, definition type, and context
+  - Added 27 tests: 21 unit tests + 6 helper function tests + 5 property-based tests
+  - Learned: Pattern templates with {symbol} placeholder allow flexible pattern generation
+  - Learned: Breaking pattern match on first match per line prevents duplicate reports
+  - Search Tools section of Phase 2 now complete (grep_search, find_files, find_definition)
+  - Total: 179 tests pass

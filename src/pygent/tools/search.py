@@ -285,3 +285,222 @@ async def find_files(
         return json.dumps({"message": "No files found", "files": []})
 
     return json.dumps({"count": len(matches), "files": matches}, indent=2)
+
+
+# Language-specific definition patterns
+# These patterns capture common definition styles for each language
+_DEFINITION_PATTERNS: dict[str, list[tuple[str, str]]] = {
+    "python": [
+        (r"^\s*def\s+{symbol}\s*\(", "function"),
+        (r"^\s*async\s+def\s+{symbol}\s*\(", "async function"),
+        (r"^\s*class\s+{symbol}\s*[\(:]", "class"),
+        (r"^{symbol}\s*=\s*", "variable"),
+        (r"^\s*{symbol}\s*:\s*\S+\s*=", "typed variable"),
+    ],
+    "javascript": [
+        (r"^\s*function\s+{symbol}\s*\(", "function"),
+        (r"^\s*async\s+function\s+{symbol}\s*\(", "async function"),
+        (r"^\s*class\s+{symbol}\s*[\{{]", "class"),
+        (r"^\s*class\s+{symbol}\s+extends\s+", "class"),
+        (r"^\s*const\s+{symbol}\s*=", "const"),
+        (r"^\s*let\s+{symbol}\s*=", "let"),
+        (r"^\s*var\s+{symbol}\s*=", "var"),
+        (r"^\s*export\s+(?:default\s+)?function\s+{symbol}\s*\(", "exported function"),
+        (r"^\s*export\s+(?:default\s+)?class\s+{symbol}\s*", "exported class"),
+        (r"^\s*export\s+const\s+{symbol}\s*=", "exported const"),
+    ],
+    "typescript": [
+        (r"^\s*function\s+{symbol}\s*[<\(]", "function"),
+        (r"^\s*async\s+function\s+{symbol}\s*[<\(]", "async function"),
+        (r"^\s*class\s+{symbol}\s*[\{{<]", "class"),
+        (r"^\s*class\s+{symbol}\s+extends\s+", "class"),
+        (r"^\s*interface\s+{symbol}\s*[\{{<]", "interface"),
+        (r"^\s*type\s+{symbol}\s*[<=]", "type"),
+        (r"^\s*const\s+{symbol}\s*[=:]", "const"),
+        (r"^\s*let\s+{symbol}\s*[=:]", "let"),
+        (r"^\s*export\s+(?:default\s+)?function\s+{symbol}\s*", "exported function"),
+        (r"^\s*export\s+(?:default\s+)?class\s+{symbol}\s*", "exported class"),
+        (r"^\s*export\s+(?:default\s+)?interface\s+{symbol}\s*", "exported interface"),
+        (r"^\s*export\s+(?:default\s+)?type\s+{symbol}\s*", "exported type"),
+        (r"^\s*export\s+const\s+{symbol}\s*", "exported const"),
+    ],
+    "go": [
+        (r"^\s*func\s+{symbol}\s*\(", "function"),
+        (r"^\s*func\s+\([^)]+\)\s+{symbol}\s*\(", "method"),
+        (r"^\s*type\s+{symbol}\s+struct\s*\{{", "struct"),
+        (r"^\s*type\s+{symbol}\s+interface\s*\{{", "interface"),
+        (r"^\s*type\s+{symbol}\s+", "type"),
+        (r"^\s*var\s+{symbol}\s+", "var"),
+        (r"^\s*const\s+{symbol}\s+", "const"),
+    ],
+    "rust": [
+        (r"^\s*fn\s+{symbol}\s*[<\(]", "function"),
+        (r"^\s*async\s+fn\s+{symbol}\s*[<\(]", "async function"),
+        (r"^\s*pub\s+fn\s+{symbol}\s*[<\(]", "public function"),
+        (r"^\s*pub\s+async\s+fn\s+{symbol}\s*[<\(]", "public async function"),
+        (r"^\s*struct\s+{symbol}\s*[\{{<]", "struct"),
+        (r"^\s*pub\s+struct\s+{symbol}\s*[\{{<]", "public struct"),
+        (r"^\s*enum\s+{symbol}\s*[\{{<]", "enum"),
+        (r"^\s*pub\s+enum\s+{symbol}\s*[\{{<]", "public enum"),
+        (r"^\s*trait\s+{symbol}\s*[\{{<:]", "trait"),
+        (r"^\s*pub\s+trait\s+{symbol}\s*[\{{<:]", "public trait"),
+        (r"^\s*type\s+{symbol}\s*[<=]", "type alias"),
+        (r"^\s*const\s+{symbol}\s*:", "const"),
+        (r"^\s*static\s+{symbol}\s*:", "static"),
+        (r"^\s*let\s+(?:mut\s+)?{symbol}\s*[=:]", "let binding"),
+    ],
+    "java": [
+        (r"^\s*(?:public|private|protected)?\s*(?:static)?\s*\w+\s+{symbol}\s*\(", "method"),
+        (r"^\s*(?:public|private|protected)?\s*class\s+{symbol}\s*", "class"),
+        (r"^\s*(?:public|private|protected)?\s*interface\s+{symbol}\s*", "interface"),
+        (r"^\s*(?:public|private|protected)?\s*enum\s+{symbol}\s*", "enum"),
+    ],
+    "c": [
+        (r"^\s*\w+[\s\*]+{symbol}\s*\([^;]*$", "function"),
+        (r"^\s*#define\s+{symbol}\s*", "macro"),
+        (r"^\s*typedef\s+.*\s+{symbol}\s*;", "typedef"),
+        (r"^\s*struct\s+{symbol}\s*\{{", "struct"),
+        (r"^\s*enum\s+{symbol}\s*\{{", "enum"),
+    ],
+    "cpp": [
+        (r"^\s*\w+[\s\*]+{symbol}\s*\([^;]*$", "function"),
+        (r"^\s*class\s+{symbol}\s*[\{{:]", "class"),
+        (r"^\s*struct\s+{symbol}\s*[\{{:]", "struct"),
+        (r"^\s*namespace\s+{symbol}\s*\{{", "namespace"),
+        (r"^\s*template\s*<[^>]*>\s*class\s+{symbol}", "template class"),
+        (r"^\s*#define\s+{symbol}\s*", "macro"),
+    ],
+}
+
+# File extension to language mapping
+_EXTENSION_TO_LANGUAGE: dict[str, str] = {
+    ".py": "python",
+    ".pyw": "python",
+    ".pyi": "python",
+    ".js": "javascript",
+    ".mjs": "javascript",
+    ".cjs": "javascript",
+    ".jsx": "javascript",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".mts": "typescript",
+    ".cts": "typescript",
+    ".go": "go",
+    ".rs": "rust",
+    ".java": "java",
+    ".c": "c",
+    ".h": "c",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".cxx": "cpp",
+    ".hpp": "cpp",
+    ".hxx": "cpp",
+}
+
+
+def _get_language_from_path(file_path: Path) -> str | None:
+    """Detect language from file extension.
+
+    Args:
+        file_path: Path to the file.
+
+    Returns:
+        Language name or None if unknown.
+    """
+    suffix = file_path.suffix.lower()
+    return _EXTENSION_TO_LANGUAGE.get(suffix)
+
+
+def _compile_patterns_for_symbol(symbol: str, language: str) -> list[tuple[re.Pattern[str], str]]:
+    """Compile regex patterns for a symbol in a given language.
+
+    Args:
+        symbol: The symbol name to search for.
+        language: The programming language.
+
+    Returns:
+        List of (compiled_pattern, definition_type) tuples.
+    """
+    patterns = _DEFINITION_PATTERNS.get(language, [])
+    compiled = []
+    escaped_symbol = re.escape(symbol)
+    for pattern_template, def_type in patterns:
+        pattern_str = pattern_template.format(symbol=escaped_symbol)
+        try:
+            compiled.append((re.compile(pattern_str, re.MULTILINE), def_type))
+        except re.error:
+            continue
+    return compiled
+
+
+@tool(
+    name="find_definition",
+    description="Find where a symbol (function, class, variable) is defined in the codebase",
+    risk=ToolRisk.LOW,
+)
+async def find_definition(
+    symbol: str,
+    path: str = ".",
+    language: str | None = None,
+) -> str:
+    """Find symbol definition.
+
+    Args:
+        symbol: Name of function, class, or variable to find.
+        path: Directory to search in (default: current directory).
+        language: Programming language hint (e.g., "python", "javascript").
+            If not provided, language is detected from file extensions.
+
+    Returns:
+        JSON array of definition locations with file, line, type, and context.
+    """
+    search_path = Path(path)
+    if not search_path.exists():
+        raise FileNotFoundError(f"Path not found: {path}")
+
+    results: list[dict[str, str | int]] = []
+
+    # Collect files to search
+    if search_path.is_file():
+        files = [search_path]
+    else:
+        files = [f for f in search_path.rglob("*") if f.is_file()]
+
+    # Filter out hidden and common ignore patterns
+    files = [f for f in files if _should_include_path(f, search_path)]
+
+    for file_path in files:
+        # Determine language for this file
+        file_lang = language or _get_language_from_path(file_path)
+        if not file_lang:
+            continue
+
+        # Get patterns for this language
+        patterns = _compile_patterns_for_symbol(symbol, file_lang)
+        if not patterns:
+            continue
+
+        try:
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+            lines = content.splitlines()
+
+            for line_num, line in enumerate(lines, start=1):
+                for pattern, def_type in patterns:
+                    if pattern.match(line):
+                        results.append(
+                            {
+                                "file": str(file_path),
+                                "line": line_num,
+                                "type": def_type,
+                                "context": line.strip(),
+                            }
+                        )
+                        break  # Only report first matching pattern per line
+
+        except (OSError, UnicodeDecodeError):
+            continue
+
+    if not results:
+        return json.dumps({"message": f"No definitions found for '{symbol}'", "definitions": []})
+
+    return json.dumps({"count": len(results), "definitions": results}, indent=2)

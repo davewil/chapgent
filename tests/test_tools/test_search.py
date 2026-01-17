@@ -1,4 +1,4 @@
-"""Tests for search tools (grep_search, find_files)."""
+"""Tests for search tools (grep_search, find_files, find_definition)."""
 
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -7,11 +7,14 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from pygent.tools.search import (
+    _compile_patterns_for_symbol,
     _get_depth,
+    _get_language_from_path,
     _grep_with_python,
     _grep_with_ripgrep,
     _is_ripgrep_available,
     _should_include_path,
+    find_definition,
     find_files,
     grep_search,
 )
@@ -670,4 +673,594 @@ async def test_prop_find_files_respects_max_depth(tmp_path, depth):
             assert file_depth <= depth
     finally:
         # Clean up
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
+# =============================================================================
+# Unit tests for find_definition
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_find_definition_python_function(tmp_path):
+    """Test finding Python function definitions."""
+    (tmp_path / "module.py").write_text(
+        """
+def hello():
+    pass
+
+def world():
+    print("world")
+""",
+        encoding="utf-8",
+    )
+
+    result = await find_definition("hello", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 1
+    assert data["definitions"][0]["type"] == "function"
+    assert data["definitions"][0]["line"] == 2
+    assert "def hello()" in data["definitions"][0]["context"]
+
+
+@pytest.mark.asyncio
+async def test_find_definition_python_async_function(tmp_path):
+    """Test finding Python async function definitions."""
+    (tmp_path / "async_module.py").write_text(
+        """
+async def fetch_data():
+    return await some_api()
+""",
+        encoding="utf-8",
+    )
+
+    result = await find_definition("fetch_data", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 1
+    assert data["definitions"][0]["type"] == "async function"
+
+
+@pytest.mark.asyncio
+async def test_find_definition_python_class(tmp_path):
+    """Test finding Python class definitions."""
+    (tmp_path / "classes.py").write_text(
+        """
+class MyClass:
+    pass
+
+class AnotherClass(BaseClass):
+    def method(self):
+        pass
+""",
+        encoding="utf-8",
+    )
+
+    result = await find_definition("MyClass", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 1
+    assert data["definitions"][0]["type"] == "class"
+    assert data["definitions"][0]["line"] == 2
+
+
+@pytest.mark.asyncio
+async def test_find_definition_python_variable(tmp_path):
+    """Test finding Python variable definitions."""
+    (tmp_path / "config.py").write_text(
+        """
+DATABASE_URL = "sqlite:///db.sqlite"
+DEBUG = True
+""",
+        encoding="utf-8",
+    )
+
+    result = await find_definition("DATABASE_URL", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 1
+    assert data["definitions"][0]["type"] == "variable"
+
+
+@pytest.mark.asyncio
+async def test_find_definition_javascript_function(tmp_path):
+    """Test finding JavaScript function definitions."""
+    (tmp_path / "utils.js").write_text(
+        """
+function calculateTotal(items) {
+    return items.reduce((sum, item) => sum + item.price, 0);
+}
+
+async function fetchData() {
+    return await fetch('/api/data');
+}
+""",
+        encoding="utf-8",
+    )
+
+    result = await find_definition("calculateTotal", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 1
+    assert data["definitions"][0]["type"] == "function"
+
+
+@pytest.mark.asyncio
+async def test_find_definition_javascript_const(tmp_path):
+    """Test finding JavaScript const definitions."""
+    (tmp_path / "config.js").write_text(
+        """
+const API_URL = 'https://api.example.com';
+let counter = 0;
+var globalVar = 'hello';
+""",
+        encoding="utf-8",
+    )
+
+    result = await find_definition("API_URL", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 1
+    assert data["definitions"][0]["type"] == "const"
+
+
+@pytest.mark.asyncio
+async def test_find_definition_typescript_interface(tmp_path):
+    """Test finding TypeScript interface definitions."""
+    (tmp_path / "types.ts").write_text(
+        """
+interface User {
+    id: number;
+    name: string;
+}
+
+type UserRole = 'admin' | 'user';
+""",
+        encoding="utf-8",
+    )
+
+    result = await find_definition("User", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 1
+    assert data["definitions"][0]["type"] == "interface"
+
+
+@pytest.mark.asyncio
+async def test_find_definition_typescript_type(tmp_path):
+    """Test finding TypeScript type definitions."""
+    (tmp_path / "types.ts").write_text(
+        """
+type Status = 'pending' | 'approved' | 'rejected';
+
+interface Config {
+    status: Status;
+}
+""",
+        encoding="utf-8",
+    )
+
+    result = await find_definition("Status", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 1
+    assert data["definitions"][0]["type"] == "type"
+
+
+@pytest.mark.asyncio
+async def test_find_definition_go_function(tmp_path):
+    """Test finding Go function definitions."""
+    (tmp_path / "main.go").write_text(
+        """
+package main
+
+func main() {
+    fmt.Println("Hello")
+}
+
+func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
+    // handler code
+}
+""",
+        encoding="utf-8",
+    )
+
+    result = await find_definition("main", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 1
+    assert data["definitions"][0]["type"] == "function"
+
+
+@pytest.mark.asyncio
+async def test_find_definition_go_struct(tmp_path):
+    """Test finding Go struct definitions."""
+    (tmp_path / "models.go").write_text(
+        """
+package models
+
+type User struct {
+    ID   int
+    Name string
+}
+
+type Server struct {
+    Port int
+}
+""",
+        encoding="utf-8",
+    )
+
+    result = await find_definition("User", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 1
+    assert data["definitions"][0]["type"] == "struct"
+
+
+@pytest.mark.asyncio
+async def test_find_definition_rust_function(tmp_path):
+    """Test finding Rust function definitions."""
+    (tmp_path / "lib.rs").write_text(
+        """
+fn calculate(x: i32, y: i32) -> i32 {
+    x + y
+}
+
+pub fn public_func() {
+    println!("public");
+}
+
+async fn async_fetch() -> Result<(), Error> {
+    Ok(())
+}
+""",
+        encoding="utf-8",
+    )
+
+    result = await find_definition("calculate", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 1
+    assert data["definitions"][0]["type"] == "function"
+
+
+@pytest.mark.asyncio
+async def test_find_definition_rust_struct(tmp_path):
+    """Test finding Rust struct definitions."""
+    (tmp_path / "models.rs").write_text(
+        """
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+pub struct Config<T> {
+    value: T,
+}
+""",
+        encoding="utf-8",
+    )
+
+    result = await find_definition("Point", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 1
+    assert data["definitions"][0]["type"] == "struct"
+
+
+@pytest.mark.asyncio
+async def test_find_definition_no_matches(tmp_path):
+    """Test find_definition when no definitions found."""
+    (tmp_path / "empty.py").write_text("# just a comment\n", encoding="utf-8")
+
+    result = await find_definition("nonexistent", str(tmp_path))
+    data = json.loads(result)
+
+    assert "message" in data
+    assert "No definitions found" in data["message"]
+    assert data["definitions"] == []
+
+
+@pytest.mark.asyncio
+async def test_find_definition_path_not_found():
+    """Test find_definition with non-existent path."""
+    with pytest.raises(FileNotFoundError, match="Path not found"):
+        await find_definition("symbol", "/nonexistent/path")
+
+
+@pytest.mark.asyncio
+async def test_find_definition_single_file(tmp_path):
+    """Test find_definition on a single file."""
+    test_file = tmp_path / "single.py"
+    test_file.write_text("def target_func():\n    pass\n", encoding="utf-8")
+
+    result = await find_definition("target_func", str(test_file))
+    data = json.loads(result)
+
+    assert data["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_find_definition_with_language_hint(tmp_path):
+    """Test find_definition with explicit language hint."""
+    # Create a file without extension
+    test_file = tmp_path / "code"
+    test_file.write_text("def my_function():\n    pass\n", encoding="utf-8")
+
+    # Without language hint, should find nothing (unknown extension)
+    result = await find_definition("my_function", str(test_file))
+    data = json.loads(result)
+    assert data.get("message") is not None  # No definitions found
+
+    # With language hint, should find it
+    result = await find_definition("my_function", str(test_file), language="python")
+    data = json.loads(result)
+    assert data["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_find_definition_multiple_definitions(tmp_path):
+    """Test finding multiple definitions of the same symbol."""
+    (tmp_path / "module1.py").write_text("def handler():\n    pass\n", encoding="utf-8")
+    (tmp_path / "module2.py").write_text("def handler():\n    pass\n", encoding="utf-8")
+
+    result = await find_definition("handler", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_find_definition_skips_hidden_dirs(tmp_path):
+    """Test that find_definition skips hidden directories."""
+    (tmp_path / "visible.py").write_text("def target():\n    pass\n", encoding="utf-8")
+    hidden = tmp_path / ".hidden"
+    hidden.mkdir()
+    (hidden / "secret.py").write_text("def target():\n    pass\n", encoding="utf-8")
+
+    result = await find_definition("target", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 1
+    assert ".hidden" not in data["definitions"][0]["file"]
+
+
+@pytest.mark.asyncio
+async def test_find_definition_skips_node_modules(tmp_path):
+    """Test that find_definition skips node_modules."""
+    (tmp_path / "app.js").write_text("function myFunc() {}\n", encoding="utf-8")
+    nm = tmp_path / "node_modules"
+    nm.mkdir()
+    (nm / "lib.js").write_text("function myFunc() {}\n", encoding="utf-8")
+
+    result = await find_definition("myFunc", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 1
+    assert "node_modules" not in data["definitions"][0]["file"]
+
+
+@pytest.mark.asyncio
+async def test_find_definition_handles_unreadable_files(tmp_path):
+    """Test that unreadable files are skipped gracefully."""
+    # Create a binary file
+    (tmp_path / "binary.py").write_bytes(b"\xff\xfe\x00\x00invalid utf8")
+    # Create a readable file
+    (tmp_path / "readable.py").write_text("def findme():\n    pass\n", encoding="utf-8")
+
+    result = await find_definition("findme", str(tmp_path))
+    data = json.loads(result)
+
+    assert data["count"] == 1
+
+
+# =============================================================================
+# Tests for helper functions
+# =============================================================================
+
+
+def test_get_language_from_path_python():
+    """Test language detection for Python files."""
+    from pathlib import Path
+
+    assert _get_language_from_path(Path("test.py")) == "python"
+    assert _get_language_from_path(Path("test.pyi")) == "python"
+    assert _get_language_from_path(Path("test.pyw")) == "python"
+
+
+def test_get_language_from_path_javascript():
+    """Test language detection for JavaScript files."""
+    from pathlib import Path
+
+    assert _get_language_from_path(Path("test.js")) == "javascript"
+    assert _get_language_from_path(Path("test.mjs")) == "javascript"
+    assert _get_language_from_path(Path("test.jsx")) == "javascript"
+
+
+def test_get_language_from_path_typescript():
+    """Test language detection for TypeScript files."""
+    from pathlib import Path
+
+    assert _get_language_from_path(Path("test.ts")) == "typescript"
+    assert _get_language_from_path(Path("test.tsx")) == "typescript"
+
+
+def test_get_language_from_path_unknown():
+    """Test language detection for unknown extensions."""
+    from pathlib import Path
+
+    assert _get_language_from_path(Path("test.xyz")) is None
+    assert _get_language_from_path(Path("test")) is None
+
+
+def test_compile_patterns_for_symbol():
+    """Test pattern compilation for symbols."""
+    patterns = _compile_patterns_for_symbol("my_func", "python")
+    assert len(patterns) > 0
+    # All should be compiled regex patterns
+    for pattern, _def_type in patterns:
+        assert hasattr(pattern, "match")
+
+
+def test_compile_patterns_unknown_language():
+    """Test pattern compilation for unknown language."""
+    patterns = _compile_patterns_for_symbol("symbol", "unknown_language")
+    assert patterns == []
+
+
+def test_compile_patterns_escapes_special_chars():
+    """Test that special regex characters in symbols are escaped."""
+    # Symbol with regex special characters
+    patterns = _compile_patterns_for_symbol("my.func+test", "python")
+    # Should not raise and should escape the special chars
+    assert len(patterns) > 0
+
+
+# =============================================================================
+# Property-based tests for find_definition
+# =============================================================================
+
+
+@settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(
+    func_name=st.text(min_size=3, max_size=15, alphabet="abcdefghijklmnopqrstuvwxyz_"),
+)
+@pytest.mark.asyncio
+async def test_prop_find_definition_finds_python_function(tmp_path, func_name):
+    """Property: find_definition should find any Python function we define."""
+    import shutil
+    import uuid
+
+    test_dir = tmp_path / f"test_{uuid.uuid4().hex}"
+    test_dir.mkdir(exist_ok=True)
+
+    try:
+        # Create a Python file with the function
+        content = f"def {func_name}():\n    pass\n"
+        (test_dir / "module.py").write_text(content, encoding="utf-8")
+
+        result = await find_definition(func_name, str(test_dir))
+        data = json.loads(result)
+
+        assert data["count"] >= 1
+        assert any(d["type"] == "function" for d in data["definitions"])
+    finally:
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
+@settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(
+    class_name=st.text(min_size=3, max_size=15, alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZ").map(
+        lambda s: s[0].upper() + s[1:].lower() if len(s) > 1 else s.upper()
+    ),
+)
+@pytest.mark.asyncio
+async def test_prop_find_definition_finds_python_class(tmp_path, class_name):
+    """Property: find_definition should find any Python class we define."""
+    import shutil
+    import uuid
+
+    test_dir = tmp_path / f"test_{uuid.uuid4().hex}"
+    test_dir.mkdir(exist_ok=True)
+
+    try:
+        # Create a Python file with the class
+        content = f"class {class_name}:\n    pass\n"
+        (test_dir / "models.py").write_text(content, encoding="utf-8")
+
+        result = await find_definition(class_name, str(test_dir))
+        data = json.loads(result)
+
+        assert data["count"] >= 1
+        assert any(d["type"] == "class" for d in data["definitions"])
+    finally:
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
+@settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(
+    func_name=st.text(min_size=3, max_size=15, alphabet="abcdefghijklmnopqrstuvwxyz"),
+)
+@pytest.mark.asyncio
+async def test_prop_find_definition_finds_js_function(tmp_path, func_name):
+    """Property: find_definition should find any JavaScript function we define."""
+    import shutil
+    import uuid
+
+    test_dir = tmp_path / f"test_{uuid.uuid4().hex}"
+    test_dir.mkdir(exist_ok=True)
+
+    try:
+        # Create a JavaScript file with the function
+        content = f"function {func_name}() {{\n    return true;\n}}\n"
+        (test_dir / "utils.js").write_text(content, encoding="utf-8")
+
+        result = await find_definition(func_name, str(test_dir))
+        data = json.loads(result)
+
+        assert data["count"] >= 1
+        assert any(d["type"] == "function" for d in data["definitions"])
+    finally:
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
+@settings(max_examples=20, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(
+    struct_name=st.text(min_size=3, max_size=15, alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZ").map(
+        lambda s: s[0].upper() + s[1:].lower() if len(s) > 1 else s.upper()
+    ),
+)
+@pytest.mark.asyncio
+async def test_prop_find_definition_finds_rust_struct(tmp_path, struct_name):
+    """Property: find_definition should find any Rust struct we define."""
+    import shutil
+    import uuid
+
+    test_dir = tmp_path / f"test_{uuid.uuid4().hex}"
+    test_dir.mkdir(exist_ok=True)
+
+    try:
+        # Create a Rust file with the struct
+        content = f"struct {struct_name} {{\n    field: i32,\n}}\n"
+        (test_dir / "models.rs").write_text(content, encoding="utf-8")
+
+        result = await find_definition(struct_name, str(test_dir))
+        data = json.loads(result)
+
+        assert data["count"] >= 1
+        assert any(d["type"] == "struct" for d in data["definitions"])
+    finally:
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
+@settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(
+    symbol_name=st.text(min_size=3, max_size=15, alphabet="abcdefghijklmnopqrstuvwxyz_"),
+)
+@pytest.mark.asyncio
+async def test_prop_find_definition_returns_correct_line(tmp_path, symbol_name):
+    """Property: find_definition should return correct line numbers."""
+    import random
+    import shutil
+    import uuid
+
+    test_dir = tmp_path / f"test_{uuid.uuid4().hex}"
+    test_dir.mkdir(exist_ok=True)
+
+    try:
+        # Create a file with some padding lines before the definition
+        num_padding_lines = random.randint(1, 10)
+        padding = "\n".join([f"# comment {i}" for i in range(num_padding_lines)])
+        content = f"{padding}\ndef {symbol_name}():\n    pass\n"
+        (test_dir / "module.py").write_text(content, encoding="utf-8")
+
+        result = await find_definition(symbol_name, str(test_dir))
+        data = json.loads(result)
+
+        expected_line = num_padding_lines + 1  # +1 for 1-based indexing
+        assert data["count"] >= 1
+        assert data["definitions"][0]["line"] == expected_line
+    finally:
         shutil.rmtree(test_dir, ignore_errors=True)

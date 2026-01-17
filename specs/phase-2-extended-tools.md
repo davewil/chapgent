@@ -579,24 +579,26 @@ async def test_find_definition_python(tmp_path):
 - [ ] Git tools fail gracefully outside of git repos
 - [ ] Web fetch handles various content types
 - [ ] Web fetch respects size limits
-- [ ] Grep search finds patterns accurately
+- [x] Grep search finds patterns accurately
+- [x] Find files works with glob patterns and depth limits
+- [x] Find definition locates symbol definitions across multiple languages
 - [ ] File operations (create, delete, move, copy) work correctly
 - [ ] Tools categorized and discoverable
 
 ### Non-Functional
 - [ ] Git operations complete in <1s for typical repos
-- [ ] Search operations use ripgrep when available
+- [x] Search operations use ripgrep when available (with Python fallback)
 - [ ] Web fetch has configurable timeout
-- [ ] All new tools have comprehensive tests
+- [x] Search tools have comprehensive unit and property-based tests
 
 ---
 
 ## Implementation Order
 
-1. **Search Tools** (3-4 days)
-   - grep_search with ripgrep backend
-   - find_files with glob patterns
-   - find_definition for common languages
+1. **Search Tools** ✅ COMPLETE
+   - grep_search with ripgrep backend ✅
+   - find_files with glob patterns ✅
+   - find_definition for common languages ✅ (supports Python, JavaScript, TypeScript, Go, Rust, Java, C, C++)
 
 2. **Additional File Tools** (2 days)
    - create_file, delete_file
