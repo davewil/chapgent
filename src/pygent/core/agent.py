@@ -11,7 +11,16 @@ from pygent.tools.registry import ToolRegistry
 
 
 class Agent:
-    """Main agent orchestrator."""
+    """Main agent orchestrator.
+
+    Attributes:
+        provider: The LLM provider for completions.
+        tools: Registry of available tools.
+        permissions: Permission manager for tool execution.
+        session: The current conversation session.
+        tool_cache: Cache for tool results.
+        system_prompt: Optional system prompt to prepend to conversations.
+    """
 
     def __init__(
         self,
@@ -20,22 +29,28 @@ class Agent:
         permissions: PermissionManager,
         session: Session,
         tool_cache: ToolCache | None = None,
+        system_prompt: str | None = None,
     ) -> None:
         self.provider = provider
         self.tools = tools
         self.permissions = permissions
         self.session = session
         self.tool_cache = tool_cache or ToolCache()
+        self.system_prompt = system_prompt
 
     async def run(self, user_message: str) -> AsyncIterator[LoopEvent]:
+        """Run the agent with a user message.
+
+        Args:
+            user_message: The user's input message.
+
+        Yields:
+            LoopEvent instances for each step of the conversation.
+        """
         # Add user message to session
-        # Spec says just user_message: str.
-        # We wrap it in a Message
         msg = Message(role="user", content=user_message)
         self.session.messages.append(msg)
 
-        # Call conversation_loop
-        async for event in conversation_loop(self, self.session.messages):
+        # Call conversation_loop with system prompt
+        async for event in conversation_loop(self, self.session.messages, self.system_prompt):
             yield event
-
-            # If we wanted to persist incrementally, we'd do it here.

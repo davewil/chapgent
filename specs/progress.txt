@@ -571,3 +571,43 @@
   - Tool Execution Progress section of Phase 3 now complete
   - TUI remains responsive during long operations acceptance criterion now met
   - Total: 840 tests pass
+2026-01-17: Started Phase 4 - Polish & Distribution. Implemented System Prompt Customization (src/pygent/config/):
+  - Enhanced SystemPromptSettings model (settings.py):
+    * Added content: str | None - direct prompt content
+    * Added file: str | None - path to prompt file (supports ~ expansion)
+    * Added append: str | None - additional content to append
+    * Added mode: Literal["replace", "append"] - how to combine with base
+    * Created DEFAULT_SYSTEM_PROMPT constant with helpful base prompt
+  - Created prompt.py module for prompt loading and template variables:
+    * TEMPLATE_VARIABLES dict defining available variables: project_name, project_type, current_dir, git_branch, date, os
+    * PromptLoadError exception for file loading failures
+    * get_template_variables() - resolves variables from ProjectContext or defaults
+    * resolve_template_variables() - replaces {variable} placeholders in content
+    * load_prompt_file() - loads prompt from file with ~ expansion
+    * get_effective_prompt() - applies all settings (file, content, mode, append) and resolves variables
+    * build_full_system_prompt() - combines user settings with project context injection
+  - Updated config/__init__.py to export new prompt module functions
+  - Wired system prompt into Agent/Provider:
+    * Added system_prompt parameter to Agent.__init__
+    * Added system_prompt parameter to conversation_loop()
+    * System message injected as first message with role="system" in LLM calls
+    * CLI (_init_agent_and_app) builds system prompt from settings + detected project context
+  - Added 50 comprehensive tests (test_config_prompt.py):
+    * TestTemplateVariables: 2 tests for TEMPLATE_VARIABLES constant
+    * TestGetTemplateVariables: 6 tests for variable resolution
+    * TestResolveTemplateVariables: 6 tests for template substitution
+    * TestLoadPromptFile: 6 tests for file loading
+    * TestGetEffectivePrompt: 12 tests for settings application
+    * TestBuildFullSystemPrompt: 4 tests for full prompt building
+    * TestPropertyBased: 4 property-based tests using hypothesis
+    * TestEdgeCases: 6 edge case tests (empty, whitespace, newlines, nested braces)
+    * TestDefaultSystemPrompt: 3 tests for default prompt constant
+    * TestIntegration: 2 end-to-end tests
+  - Learned: Template variable resolution should preserve unknown {variables} rather than raising errors
+  - Learned: file parameter takes precedence over content when both are specified
+  - Learned: System prompt must be injected at conversation_loop level, not provider level, for proper message ordering
+  - Learned: Use Path.expanduser() for ~ expansion in file paths
+  - Learned: Pydantic Literal type provides built-in validation for mode parameter
+  - System Prompt Customization section of Phase 4 now complete (user/project config, template variables, context injection)
+  - CLI prompt commands (show, set, edit, reset) deferred to future work
+  - Total: 890 tests pass

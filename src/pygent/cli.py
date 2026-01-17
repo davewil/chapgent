@@ -1,10 +1,13 @@
 import asyncio
 import uuid
+from pathlib import Path
 from typing import Any
 
 import click
 
 from pygent.config.loader import load_config
+from pygent.config.prompt import PromptLoadError, build_full_system_prompt
+from pygent.context.detection import detect_project_context
 from pygent.core.agent import Agent
 from pygent.core.mock_provider import MockLLMProvider
 from pygent.core.permissions import PermissionManager
@@ -95,16 +98,28 @@ async def _init_agent_and_app(
     # It should probably start as False unless we want it sticky.
     permissions.session_override = False
 
-    # 6. Agent
+    # 6. Build system prompt
+    system_prompt: str | None = None
+    try:
+        # Detect project context for template variables and context injection
+        project_context = await detect_project_context(Path.cwd())
+        system_prompt = build_full_system_prompt(settings.system_prompt, project_context)
+    except PromptLoadError as e:
+        # Log warning but continue - system prompt customization failing
+        # shouldn't prevent the agent from starting
+        click.echo(f"Warning: Could not load custom system prompt: {e}", err=True)
+
+    # 7. Agent
     agent = Agent(
         provider=provider,
         tools=tools,
         permissions=permissions,
         session=current_session,
+        system_prompt=system_prompt,
     )
     app.agent = agent
 
-    # 7. Apply TUI settings
+    # 8. Apply TUI settings
     app.theme = settings.tui.theme
 
     return app

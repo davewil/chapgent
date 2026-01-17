@@ -85,12 +85,25 @@ def _convert_to_llm_messages(messages: list[Message]) -> list[dict[str, Any]]:
 async def conversation_loop(
     agent: Agent,
     messages: list[Message],
+    system_prompt: str | None = None,
 ) -> AsyncIterator[LoopEvent]:
-    """Execute the agent loop until no more tool calls."""
+    """Execute the agent loop until no more tool calls.
 
+    Args:
+        agent: The agent instance with provider, tools, and permissions.
+        messages: List of conversation messages.
+        system_prompt: Optional system prompt to prepend to the conversation.
+
+    Yields:
+        LoopEvent instances for each step of the conversation.
+    """
     while True:
         # Convert messages for LLM
         llm_msgs = _convert_to_llm_messages(messages)
+
+        # Prepend system message if provided
+        if system_prompt:
+            llm_msgs = [{"role": "system", "content": system_prompt}] + llm_msgs
 
         # Get available tools
         tool_list = []

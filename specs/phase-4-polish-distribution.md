@@ -590,8 +590,8 @@ __all__ = [
 ## Acceptance Criteria
 
 ### Functional
-- [ ] System prompts customizable at user and project level
-- [ ] Template variables work in prompts
+- [x] System prompts customizable at user and project level
+- [x] Template variables work in prompts
 - [ ] Config CLI commands functional
 - [ ] Package installable from PyPI
 - [ ] Documentation complete and accurate
