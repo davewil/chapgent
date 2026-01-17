@@ -159,3 +159,52 @@ PermissionPrompt .buttons {
 PermissionPrompt Button {
     margin: 0 2;
 }
+
+/* Command Palette modal */
+CommandPalette {
+    align: center middle;
+}
+
+#palette-title {
+    background: $primary-darken-1;
+    color: $text;
+    text-style: bold;
+    padding: 1 2;
+    width: 60;
+    text-align: center;
+}
+
+#palette-input {
+    width: 60;
+    margin: 0 0 1 0;
+    border: round $accent;
+}
+
+#palette-input:focus {
+    border: round $primary;
+}
+
+#palette-commands {
+    width: 60;
+    height: 15;
+    background: $surface;
+    border: round $secondary;
+}
+
+.palette-item {
+    padding: 0 2;
+    margin: 0;
+    background: $surface;
+}
+
+.palette-item:hover {
+    background: $primary-darken-2;
+}
+
+.palette-item-selected {
+    padding: 0 2;
+    margin: 0;
+    background: $primary-darken-1;
+    color: $text;
+    text-style: bold;
+}

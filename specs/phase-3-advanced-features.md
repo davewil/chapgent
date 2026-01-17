@@ -291,11 +291,11 @@ BINDINGS = [
 
     # Implemented
     ("ctrl+b", "toggle_sidebar", "Toggle Sidebar"),  # ✅ Implemented
+    ("ctrl+shift+p", "command_palette", "Commands"),  # ✅ Implemented
+    ("ctrl+t", "toggle_tools", "Toggle Tool Panel"),  # ✅ Implemented
+    ("ctrl+l", "clear", "Clear"),  # ✅ Implemented
 
     # New (TODO)
-    ("ctrl+shift+p", "command_palette", "Commands"),
-    ("ctrl+t", "toggle_tools", "Toggle Tool Panel"),
-    ("ctrl+l", "clear", "Clear"),
     ("ctrl+/", "help", "Help"),
     ("ctrl+o", "open_session", "Open Session"),
     ("f5", "rerun_last", "Re-run Last"),
@@ -561,7 +561,7 @@ async def test_session_sidebar():
 - [x] Test results displayed in structured format
 - [x] Project scaffolding creates valid project structures
 - [x] Templates are customizable
-- [ ] Command palette accessible and functional
+- [x] Command palette accessible and functional (CommandPalette: 53 tests)
 - [x] Session sidebar shows all sessions (SessionsSidebar: 28 tests)
 - [x] Project context correctly detected
 - [x] .gitignore respected in file operations
@@ -572,7 +572,7 @@ async def test_session_sidebar():
 - [x] Parallel tool execution for read operations (Parallel: 58 tests)
 - [ ] TUI remains responsive during long operations
 - [ ] Memory usage stays bounded with large sessions
-- [x] All features have test coverage (Context Awareness: 92 tests, Test Runner: 72 tests, Scaffolding: 77 tests, Error Recovery: 43 tests, ToolCache: 48 tests, Parallel: 58 tests, Session Sidebar: 28 tests)
+- [x] All features have test coverage (Context Awareness: 92 tests, Test Runner: 72 tests, Scaffolding: 77 tests, Error Recovery: 43 tests, ToolCache: 48 tests, Parallel: 58 tests, Session Sidebar: 28 tests, Command Palette: 53 tests)
 
 ---
 

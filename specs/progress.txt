@@ -466,3 +466,48 @@
     * TestEdgeCases: 4 edge case tests (empty ID, long ID, special chars, nonexistent session)
   - Session Sidebar section of Phase 3 now complete
   - Total: 731 tests pass
+2026-01-17: Implemented Command Palette (src/pygent/tui/widgets.py, app.py, styles.tcss):
+  - Added PaletteCommand dataclass: Represents a command with id, name, description, and optional shortcut
+    * matches() method for fuzzy search: substring matching and character-in-order matching
+  - Added _fuzzy_match() helper: Checks if all characters in query appear in text in order
+  - Added DEFAULT_COMMANDS list with 7 built-in commands:
+    * new_session, save_session, toggle_sidebar, toggle_permissions, toggle_tools, clear, quit
+  - Added CommandPaletteItem widget: Displays single command with selection state
+    * set_selected() method to toggle visual selection
+    * CSS classes: palette-item, palette-item-selected
+  - Added CommandPalette ModalScreen: Main command palette UI
+    * Fuzzy search input field at top
+    * Scrollable list of filtered commands
+    * Keyboard navigation: up/down arrows, enter to select, escape to dismiss
+    * Custom commands support via constructor parameter
+    * _update_command_list() filters and rebuilds command list on input change
+    * on_input_submitted() handler to execute command when Enter pressed in input field
+  - Integrated into PygentApp:
+    * Added ctrl+shift+p keybinding to open command palette
+    * action_command_palette() uses push_screen with callback pattern (not push_screen_wait)
+    * callback uses call_later() to execute actions outside of the callback context
+  - Added new TUI actions:
+    * action_toggle_tools(): Toggle tool panel visibility (ctrl+t)
+    * action_clear(): Clear conversation and tool panel (ctrl+l)
+  - Added CSS styling for command palette:
+    * Centered modal with fixed width (60 chars)
+    * Input field with accent border
+    * Command list with hover and selected states
+  - Learned: When Input widget has focus, Enter triggers Input.Submitted event, not screen keybinding
+    * Must handle on_input_submitted() to capture Enter key in command palette
+  - Learned: push_screen_wait() requires being in a worker context; use callback pattern instead for actions
+  - Learned: To query a modal screen in tests, use app.screen instead of app.query_one()
+  - Learned: Callbacks from push_screen need asyncio.sleep() in tests to allow execution time
+  - Learned: Use call_later() in callbacks to defer action execution outside callback context
+  - Added 53 tests:
+    * TestPaletteCommand: 8 tests for dataclass and matching
+    * TestFuzzyMatch: 7 tests for fuzzy matching helper
+    * TestDefaultCommands: 4 tests for default commands list
+    * TestCommandPaletteItem: 6 tests for item widget
+    * TestCommandPalette: 11 tests for palette widget (compose, filter, dismiss, navigation)
+    * TestPygentAppCommandPaletteIntegration: 3 tests for app integration
+    * TestNewActions: 4 tests for toggle_tools and clear actions
+    * TestPropertyBased: 5 property-based tests using hypothesis
+    * TestEdgeCases: 5 edge case tests (empty commands, special chars, unicode, rapid filter)
+  - Command Palette section of Phase 3 now complete
+  - Total: 784 tests pass

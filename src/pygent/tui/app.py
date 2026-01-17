@@ -10,6 +10,7 @@ from pygent.core.agent import Agent
 from pygent.session.models import Session
 from pygent.session.storage import SessionStorage
 from pygent.tui.widgets import (
+    CommandPalette,
     ConversationPanel,
     MessageInput,
     PermissionPrompt,
@@ -29,6 +30,9 @@ class PygentApp(App[None]):
         ("ctrl+s", "save_session", "Save"),
         ("ctrl+p", "toggle_permissions", "Toggle Permissions"),
         ("ctrl+b", "toggle_sidebar", "Toggle Sidebar"),
+        ("ctrl+shift+p", "command_palette", "Commands"),
+        ("ctrl+t", "toggle_tools", "Toggle Tools"),
+        ("ctrl+l", "clear", "Clear"),
     ]
 
     def __init__(
@@ -180,6 +184,44 @@ class PygentApp(App[None]):
         except Exception:
             # Sidebar not present in compose (show_sidebar=False in settings)
             self.notify("Sessions sidebar not available.", severity="warning")
+
+    def action_toggle_tools(self) -> None:
+        """Toggle the tool panel visibility."""
+        try:
+            tool_panel = self.query_one(ToolPanel)
+            tool_panel.display = not tool_panel.display
+            state = "shown" if tool_panel.display else "hidden"
+            self.notify(f"Tool panel {state}.", severity="information")
+        except Exception:
+            # Tool panel not present in compose (show_tool_panel=False in settings)
+            self.notify("Tool panel not available.", severity="warning")
+
+    def action_clear(self) -> None:
+        """Clear the current conversation."""
+        try:
+            self.query_one(ConversationPanel).clear()
+            self.notify("Conversation cleared.", severity="information")
+        except Exception:
+            pass
+
+        try:
+            self.query_one(ToolPanel).clear()
+        except Exception:
+            pass  # ToolPanel might not be present
+
+    def action_command_palette(self) -> None:
+        """Show the command palette."""
+
+        def handle_command(result: str | None) -> None:
+            """Handle the selected command from the palette."""
+            if result is not None:
+                # Execute the action corresponding to the selected command
+                action_method = getattr(self, f"action_{result}", None)
+                if action_method is not None:
+                    # Use call_later to run the action outside of the callback
+                    self.call_later(action_method)
+
+        self.push_screen(CommandPalette(), callback=handle_command)
 
     async def _populate_sessions_sidebar(self) -> None:
         """Populate the sessions sidebar with saved sessions."""
