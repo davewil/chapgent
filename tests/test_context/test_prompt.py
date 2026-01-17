@@ -2,6 +2,7 @@
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
+
 from pygent.context.models import GitInfo, ProjectContext, ProjectType, TestFramework
 from pygent.context.prompt import (
     _format_dependencies,

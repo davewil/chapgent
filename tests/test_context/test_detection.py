@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
+
 from pygent.context.detection import (
     GitIgnoreFilter,
     _detect_git_info,

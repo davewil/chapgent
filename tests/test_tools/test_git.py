@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
+
 from pygent.tools.git import (
     GitError,
     _check_git_repo,

@@ -1,4 +1,5 @@
 import pytest
+
 from pygent.tools.base import ToolCategory, ToolDefinition, ToolRisk, tool
 
 

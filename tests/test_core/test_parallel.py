@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
+
 from pygent.core.parallel import (
     PATH_ARGUMENTS,
     READ_ONLY_TOOLS,

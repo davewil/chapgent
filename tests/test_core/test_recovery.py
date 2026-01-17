@@ -7,6 +7,7 @@ import json
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
+
 from pygent.core.recovery import (
     ERROR_PATTERNS,
     MESSAGE_PATTERNS,
