@@ -561,14 +561,14 @@ async def test_session_sidebar():
 - [ ] Templates are customizable
 - [ ] Command palette accessible and functional
 - [ ] Session sidebar shows all sessions
-- [ ] Project context correctly detected
-- [ ] .gitignore respected in file operations
+- [x] Project context correctly detected
+- [x] .gitignore respected in file operations
 
 ### Non-Functional
 - [ ] Tool caching reduces redundant operations
 - [ ] TUI remains responsive during long operations
 - [ ] Memory usage stays bounded with large sessions
-- [ ] All features have test coverage
+- [x] All features have test coverage (Context Awareness: 92 tests)
 
 ---
 

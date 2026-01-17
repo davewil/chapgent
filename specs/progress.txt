@@ -167,3 +167,35 @@
   - Tool Categories & Discovery section of Phase 2 now complete
   - Phase 2 all acceptance criteria now met
   - Total: 313 tests pass
+2026-01-17: Started Phase 3 - Advanced Features. Implemented Context Awareness System (src/pygent/context/):
+  - Created context module structure (__init__.py, models.py, detection.py, prompt.py)
+  - Implemented TestFramework enum: pytest, unittest, jest, mocha, vitest, go test, cargo test
+  - Implemented ProjectType enum: python, node, go, rust, unknown
+  - Implemented GitInfo model: branch, remote, has_changes, commit_count, last_commit
+  - Implemented ProjectContext model: type, root, name, version, dependencies, scripts, test_framework, git_info, config_files
+  - Implemented detect_project_context() function:
+    * Auto-detects project type from config files (pyproject.toml, package.json, go.mod, Cargo.toml)
+    * Parses dependencies and scripts from project files
+    * Detects test framework from config and dependencies
+    * Gathers git repository info (branch, status, commit count)
+    * Python detection takes precedence over other types when multiple markers present
+  - Implemented GitIgnoreFilter class:
+    * Default excludes: .git, __pycache__, node_modules, venv, dist, build, etc.
+    * Loads patterns from .gitignore file
+    * Handles directory patterns (ending with /)
+    * filter_paths() method for batch filtering
+  - Implemented build_system_prompt() function:
+    * Injects project context into base system prompt
+    * Formats dependencies, scripts, test framework, git info
+    * Adds language-specific coding conventions (PEP 8 for Python, gofmt for Go, etc.)
+    * Supports user customization overrides
+  - Added 92 tests (unit + property-based):
+    * test_models.py: 16 tests for enums, GitInfo, ProjectContext serialization
+    * test_detection.py: 44 tests for GitIgnoreFilter, detect functions, git info
+    * test_prompt.py: 32 tests for formatting helpers and build_system_prompt
+  - Learned: Use sys.version_info >= (3, 11) for tomllib import (cleaner than try/except for mypy)
+  - Learned: Add __test__ = False to Enum classes with "Test" in name to prevent pytest collection
+  - Learned: fnmatch doesn't handle gitignore directory patterns (ending with /); need special handling
+  - Learned: Pydantic models with nested optional models (like GitInfo) serialize/deserialize cleanly
+  - Context Awareness section of Phase 3 now complete
+  - Total: 405 tests pass
