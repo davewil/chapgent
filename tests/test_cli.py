@@ -146,17 +146,30 @@ class TestResumeCommand:
 
 
 class TestConfigCommand:
-    """Tests for the config CLI command."""
+    """Tests for the config CLI command group."""
+
+    def test_config_is_group(self):
+        """Test config is a command group with subcommands."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["config", "--help"])
+
+        assert result.exit_code == 0
+        assert "Manage configuration" in result.output
+        assert "show" in result.output
+        assert "path" in result.output
+        assert "edit" in result.output
+        assert "init" in result.output
+        assert "set" in result.output
 
     @patch("pygent.cli.load_config")
     def test_config_show(self, mock_load_config):
-        """Test config command displays current configuration."""
+        """Test config show command displays current configuration."""
         from pygent.config.settings import Settings
 
         mock_load_config.return_value = Settings()
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["config"])
+        result = runner.invoke(cli, ["config", "show"])
 
         assert result.exit_code == 0
         # Should show config keys

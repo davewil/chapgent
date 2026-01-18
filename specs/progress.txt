@@ -643,3 +643,45 @@
   - Learned: monkeypatch.delenv() with raising=False is cleaner for clearing env vars in tests
   - Configuration Polish: Environment Variables section of Phase 4 now complete
   - Total: 927 tests pass
+2026-01-18: Implemented Config CLI Commands (src/pygent/cli.py):
+  - Refactored config command from single command to command group (click.group)
+  - Implemented 'config show' subcommand: Displays current configuration (moved from previous 'config' command)
+  - Implemented 'config path' subcommand: Shows config file paths (user and project) with [exists]/[not found] status
+    * Displays priority information (env vars > project > user > defaults)
+  - Implemented 'config edit' subcommand: Opens config in $EDITOR
+    * Falls back to VISUAL env var if EDITOR not set, then to 'vi'
+    * Creates default config file if it doesn't exist before editing
+    * Supports --project flag to edit project config instead of user config
+  - Implemented 'config init' subcommand: Creates default config file with commented-out defaults
+    * Supports --project flag for project config
+    * Supports --force flag to overwrite existing config
+  - Implemented 'config set' subcommand: Sets a configuration value
+    * VALID_CONFIG_KEYS constant defines all settable keys
+    * Type conversion for integers (max_tokens), booleans (show_tool_panel, etc.)
+    * Validation for mode values (replace/append)
+    * Preserves existing values when setting new ones
+    * Custom TOML writer (_write_toml, _write_toml_section) to avoid tomli-w dependency
+  - Helper functions: _get_config_paths(), _write_default_config(), _convert_value(), _format_toml_value()
+  - Added 61 comprehensive tests (test_config_cli.py):
+    * TestGetConfigPaths: 3 tests for path helper
+    * TestValidConfigKeys: 5 tests for VALID_CONFIG_KEYS constant
+    * TestConvertValue: 9 tests for value type conversion
+    * TestFormatTomlValue: 6 tests for TOML value formatting
+    * TestWriteTomlSection: 3 tests for TOML section writer
+    * TestWriteToml: 1 test for full TOML writer
+    * TestWriteDefaultConfig: 2 tests for default config generator
+    * TestConfigPathCommand: 5 tests for 'config path' command
+    * TestConfigInitCommand: 4 tests for 'config init' command
+    * TestConfigEditCommand: 5 tests for 'config edit' command
+    * TestConfigSetCommand: 6 tests for 'config set' command
+    * TestConfigShowCommand: 2 tests for 'config show' command
+    * TestPropertyBased: 4 property-based tests using hypothesis
+    * TestEdgeCases: 5 edge case tests
+    * TestIntegration: 2 end-to-end integration tests
+  - Learned: Click's @cli.group() decorator creates command groups with subcommands via @group.command()
+  - Learned: Custom TOML writer needed since tomllib is read-only; toml library (tomli-w) would add dependency
+  - Learned: subprocess.run() raises FileNotFoundError when command not found
+  - Learned: monkeypatch.setattr(Path, "home", ...) works to mock Path.home() in tests
+  - Learned: Click's CliRunner captures subprocess output differently; use 'echo' as test editor
+  - Config CLI Commands section of Phase 4 now complete
+  - Total: 989 tests pass

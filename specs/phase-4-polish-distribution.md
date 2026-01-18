@@ -593,7 +593,7 @@ __all__ = [
 - [x] System prompts customizable at user and project level
 - [x] Template variables work in prompts
 - [x] Environment variables override config files
-- [ ] Config CLI commands functional
+- [x] Config CLI commands functional
 - [ ] Package installable from PyPI
 - [ ] Documentation complete and accurate
 - [ ] First-run experience smooth
