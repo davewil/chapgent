@@ -11,6 +11,8 @@ import asyncio
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from pygent.core.cancellation import CancellationToken
+
 if TYPE_CHECKING:
     from pygent.core.agent import Agent
     from pygent.core.providers import ToolUseBlock
@@ -334,6 +336,7 @@ async def execute_batch(
 async def execute_tools_parallel(
     tool_calls: list[tuple[ToolUseBlock, ToolDefinition]],
     agent: Agent,
+    cancellation_token: CancellationToken | None = None,
 ) -> list[ToolResult]:
     """Execute multiple tool calls with parallel execution where safe.
 
@@ -342,12 +345,17 @@ async def execute_tools_parallel(
     - Write operations run sequentially
     - Same-file operations run sequentially
 
+    Cancellation is checked between batches (not mid-batch) to allow
+    running operations to complete cleanly.
+
     Args:
         tool_calls: List of (tool_use, tool_def) tuples to execute.
         agent: The agent providing permissions, tools, and caching.
+        cancellation_token: Optional token for cancelling execution.
 
     Returns:
         List of tool results in the same order as input tool_calls.
+        If cancelled, returns partial results for completed batches.
     """
     if not tool_calls:
         return []
@@ -361,6 +369,10 @@ async def execute_tools_parallel(
     # Execute batches sequentially, items within parallelizable batches in parallel
     results: list[ToolResult] = []
     for batch in batches:
+        # Check cancellation between batches (not mid-batch)
+        if cancellation_token is not None and cancellation_token.is_cancelled:
+            break
+
         batch_results = await execute_batch(batch, agent)
         results.extend(batch_results)
 

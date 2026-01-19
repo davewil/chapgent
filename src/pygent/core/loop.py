@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from pygent.core.cancellation import CancellationToken
 from pygent.core.parallel import execute_tools_parallel
 from pygent.core.providers import LLMError, LLMResponse, TokenUsage, classify_llm_error
 from pygent.core.providers import TextBlock as ProvTextBlock
@@ -26,7 +27,7 @@ class LoopEvent:
     Attributes:
         type: Event type - "text", "tool_call", "tool_result", "param_error",
               "permission_denied", "finished", "cache_hit", "iteration_limit_reached",
-              "token_limit_reached", "llm_error".
+              "token_limit_reached", "llm_error", "cancelled".
         content: Event content (text or tool result).
         tool_name: Name of the tool involved (for tool events).
         tool_id: Unique ID of the tool call (for matching calls to results).
@@ -38,6 +39,7 @@ class LoopEvent:
         error_type: Type of error (for llm_error events).
         error_message: Error message (for llm_error events).
         retryable: Whether the error can be retried (for llm_error events).
+        cancel_reason: Reason for cancellation (for cancelled events).
     """
 
     type: str
@@ -52,6 +54,7 @@ class LoopEvent:
     error_type: str | None = None
     error_message: str | None = None
     retryable: bool | None = None
+    cancel_reason: str | None = None
 
 
 def _convert_to_llm_messages(messages: list[Message]) -> list[dict[str, Any]]:
@@ -104,6 +107,7 @@ async def conversation_loop(
     system_prompt: str | None = None,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
     max_tokens: int | None = None,
+    cancellation_token: CancellationToken | None = None,
 ) -> AsyncIterator[LoopEvent]:
     """Execute the agent loop until no more tool calls.
 
@@ -113,6 +117,8 @@ async def conversation_loop(
         system_prompt: Optional system prompt to prepend to the conversation.
         max_iterations: Maximum number of iterations before graceful exit (default: 50).
         max_tokens: Maximum total tokens to use before graceful exit (None = unlimited).
+        cancellation_token: Optional token for cancelling execution. When the token
+            is cancelled, the loop will exit gracefully after the current operation.
 
     Yields:
         LoopEvent instances for each step of the conversation.
@@ -121,6 +127,18 @@ async def conversation_loop(
     total_tokens_used = 0
 
     while True:
+        # Check cancellation at start of iteration
+        if cancellation_token is not None and cancellation_token.is_cancelled:
+            yield LoopEvent(
+                type="cancelled",
+                content="Operation cancelled by user",
+                cancel_reason=cancellation_token.reason,
+                iteration=iteration,
+                total_tokens=total_tokens_used,
+                timestamp=datetime.now(),
+            )
+            break
+
         # Check iteration limit
         if iteration >= max_iterations:
             yield LoopEvent(
@@ -246,7 +264,7 @@ async def conversation_loop(
 
         # Execute valid tool calls with parallel execution
         if tool_calls:
-            results = await execute_tools_parallel(tool_calls, agent)
+            results = await execute_tools_parallel(tool_calls, agent, cancellation_token)
 
             for tool_result in results:
                 # Yield appropriate event type
@@ -274,6 +292,21 @@ async def conversation_loop(
                         is_error=tool_result.is_error,
                     )
                 )
+
+        # Check cancellation after tool execution (let tools finish first)
+        if cancellation_token is not None and cancellation_token.is_cancelled:
+            # Still append results so the conversation state is consistent
+            if result_blocks:
+                messages.append(Message(role="user", content=result_blocks))
+            yield LoopEvent(
+                type="cancelled",
+                content="Operation cancelled after tool execution",
+                cancel_reason=cancellation_token.reason,
+                iteration=iteration,
+                total_tokens=total_tokens_used,
+                timestamp=datetime.now(),
+            )
+            break
 
         # Append Tool Results
         if result_blocks:

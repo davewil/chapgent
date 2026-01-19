@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 from pygent.core.cache import ToolCache
+from pygent.core.cancellation import CancellationToken
 from pygent.core.loop import DEFAULT_MAX_ITERATIONS, LoopEvent, conversation_loop
 from pygent.core.permissions import PermissionManager
 from pygent.core.providers import LLMProvider
@@ -43,6 +44,28 @@ class Agent:
         self.system_prompt = system_prompt
         self.max_iterations = max_iterations
         self.max_tokens = max_tokens
+        self._cancellation_token: CancellationToken | None = None
+
+    def cancel(self, reason: str | None = None) -> None:
+        """Request cancellation of the current run.
+
+        This method is safe to call from any thread or coroutine.
+        The agent will exit gracefully after the current operation completes.
+
+        Args:
+            reason: Optional human-readable reason for cancellation.
+        """
+        if self._cancellation_token is not None:
+            self._cancellation_token.cancel(reason)
+
+    @property
+    def is_cancelled(self) -> bool:
+        """Check if cancellation was requested.
+
+        Returns:
+            True if cancel() was called during the current run.
+        """
+        return self._cancellation_token is not None and self._cancellation_token.is_cancelled
 
     async def run(self, user_message: str) -> AsyncIterator[LoopEvent]:
         """Run the agent with a user message.
@@ -53,16 +76,24 @@ class Agent:
         Yields:
             LoopEvent instances for each step of the conversation.
         """
+        # Create a fresh cancellation token for this run
+        self._cancellation_token = CancellationToken()
+
         # Add user message to session
         msg = Message(role="user", content=user_message)
         self.session.messages.append(msg)
 
-        # Call conversation_loop with system prompt and limits
-        async for event in conversation_loop(
-            self,
-            self.session.messages,
-            self.system_prompt,
-            max_iterations=self.max_iterations,
-            max_tokens=self.max_tokens,
-        ):
-            yield event
+        try:
+            # Call conversation_loop with system prompt, limits, and cancellation token
+            async for event in conversation_loop(
+                self,
+                self.session.messages,
+                self.system_prompt,
+                max_iterations=self.max_iterations,
+                max_tokens=self.max_tokens,
+                cancellation_token=self._cancellation_token,
+            ):
+                yield event
+        finally:
+            # Clear the token after run completes
+            self._cancellation_token = None

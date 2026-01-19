@@ -154,49 +154,68 @@ Four independent improvements to harden the agent loop for production use. Each 
 
 ---
 
-## Phase 4: Cancellation Support
+## Phase 4: Cancellation Support ✅ COMPLETED
 
 **Priority:** Lower (nice to have)
 
 **Goal:** Allow graceful cancellation of agent execution.
 
-### Changes
+**Status:** ✅ Completed 2026-01-19
 
-1. **`src/pygent/core/cancellation.py`** (new file)
-   - Create `CancellationToken` class:
-     ```python
-     class CancellationToken:
-         def __init__(self) -> None:
-             self._cancelled: bool = False
+### Changes Made
 
-         def cancel(self) -> None:
-             self._cancelled = True
+1. **`src/pygent/core/cancellation.py`** (new file) ✅
+   - Created `CancellationToken` class with:
+     - `_cancelled`, `_cancel_time`, `_reason` fields
+     - `_event` (asyncio.Event) for async waiting
+     - `cancel(reason)` method - idempotent, sets timestamp and reason
+     - `is_cancelled`, `cancel_time`, `reason` properties
+     - `reset()` method for token reuse
+     - `wait_for_cancellation(timeout)` async method
+     - `raise_if_cancelled()` method that raises CancellationError
+   - Created `CancellationError` exception class
 
-         @property
-         def is_cancelled(self) -> bool:
-             return self._cancelled
-     ```
-
-2. **`src/pygent/core/loop.py`**
-   - Add `cancellation_token: CancellationToken | None = None` parameter
+2. **`src/pygent/core/loop.py`** ✅
+   - Added `cancellation_token: CancellationToken | None = None` parameter to `conversation_loop()`
+   - Added `cancel_reason: str | None = None` field to `LoopEvent`
    - Check `token.is_cancelled` at start of each iteration
    - Check after tool execution completes (let tools finish)
-   - Add `LoopEvent(type="cancelled")` event type
-   - Yield cancelled event and exit gracefully
+   - Yield `LoopEvent(type="cancelled")` with cancel_reason on cancellation
+   - Pass cancellation_token to `execute_tools_parallel()`
 
-3. **`src/pygent/core/agent.py`**
-   - Add `cancellation_token` parameter to `run()`
-   - Store reference for external cancellation via `Agent.cancel()`
+3. **`src/pygent/core/agent.py`** ✅
+   - Added `_cancellation_token` private attribute
+   - Added `cancel(reason)` method for external cancellation
+   - Added `is_cancelled` property to check cancellation state
+   - Create fresh CancellationToken at start of each `run()`
+   - Pass token to `conversation_loop()`
+   - Clear token in finally block after run completes
 
-4. **`src/pygent/core/parallel.py`**
-   - Pass cancellation token to batch execution
-   - Check between batches (not mid-batch, per Q4.2 decision)
+4. **`src/pygent/core/parallel.py`** ✅
+   - Added `cancellation_token` parameter to `execute_tools_parallel()`
+   - Check cancellation between batches (not mid-batch)
+   - Return partial results for completed batches if cancelled
 
-### Tests
-- Test cancellation before first iteration
-- Test cancellation mid-loop (after tool execution)
-- Test running tools complete before cancellation takes effect
-- Test cancellation token can be reused after reset
+### Tests ✅
+- `tests/test_core/test_cancellation.py` (new file) - 32 tests:
+  - TestCancellationToken: 7 tests for token state management
+  - TestCancellationTokenRaiseIfCancelled: 3 tests for raise_if_cancelled
+  - TestCancellationTokenWaitForCancellation: 3 async tests for waiting
+  - TestCancellationError: 3 tests for exception class
+  - TestCancellationTokenInLoopEvent: 2 tests for LoopEvent fields
+  - TestCancellationInConversationLoop: 2 async tests for loop cancellation
+  - TestCancellationInAgent: 3 tests for Agent.cancel()
+  - TestCancellationInParallel: 2 tests for parallel execution
+  - TestPropertyBasedCancellation: 2 hypothesis tests
+  - TestEdgeCases: 4 tests for edge cases
+  - TestIntegration: 1 full integration test
+
+### Learnings
+- asyncio.Event provides clean async coordination for cancellation
+- Cancellation should be checked at safe points (iteration start, between batches)
+- Let running tools complete before checking cancellation for clean state
+- Fresh token per run() prevents stale cancellation state
+- Idempotent cancel() prevents race conditions with multiple callers
 
 ---
 
@@ -205,7 +224,7 @@ Four independent improvements to harden the agent loop for production use. Each 
 1. **Phase 1** (Tool Definition Metadata) - ✅ COMPLETED 2026-01-19
 2. **Phase 2** (Limits) - ✅ COMPLETED 2026-01-19
 3. **Phase 3** (Error Handling) - ✅ COMPLETED 2026-01-19
-4. **Phase 4** (Cancellation) - ⏳ Pending - Nice to have
+4. **Phase 4** (Cancellation) - ✅ COMPLETED 2026-01-19
 
 ## Notes
 
@@ -232,3 +251,10 @@ Four independent improvements to harden the agent loop for production use. Each 
 - **New Features:** LLM exception hierarchy, error classification, llm_error event type
 - **Tests Added:** 38 new tests (30 in test_providers_errors.py, 8 in test_loop.py)
 - **Pattern:** Classify errors into typed exceptions with retryable flag, yield event and exit for caller to decide retry
+
+### Phase 4 Results
+- **Files Created:** 2 (cancellation.py, tests/test_core/test_cancellation.py)
+- **Files Modified:** 3 (loop.py, agent.py, parallel.py)
+- **New Features:** CancellationToken class, Agent.cancel() method, "cancelled" LoopEvent type
+- **Tests Added:** 32 new tests for cancellation system
+- **Pattern:** Check cancellation at safe points (iteration start, between batches), let running operations complete

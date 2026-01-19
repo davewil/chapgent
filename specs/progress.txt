@@ -1051,3 +1051,52 @@
   - Learned: Classification should be case-insensitive (str.lower()) for robustness
   - Phase 3 of Agent Loop Improvements complete
   - Total: 60 tests in test_providers_errors.py + test_loop.py pass
+2026-01-19: Implemented Agent Loop Improvements - Phase 4: Cancellation Support (AGENT_LOOP_IMPROVEMENTS.md):
+  - Created CancellationToken class in src/pygent/core/cancellation.py:
+    * _cancelled, _cancel_time, _reason fields for tracking state
+    * _event (asyncio.Event) for async coordination
+    * cancel(reason) method - idempotent, sets timestamp and reason
+    * is_cancelled, cancel_time, reason properties
+    * reset() method for token reuse
+    * wait_for_cancellation(timeout) async method
+    * raise_if_cancelled() method that raises CancellationError
+  - Created CancellationError exception class
+  - Updated src/pygent/core/loop.py:
+    * Added cancellation_token parameter to conversation_loop()
+    * Added cancel_reason field to LoopEvent dataclass
+    * Check token.is_cancelled at start of each iteration
+    * Check after tool execution completes (let tools finish)
+    * Yield LoopEvent(type="cancelled") with cancel_reason on cancellation
+    * Pass cancellation_token to execute_tools_parallel()
+  - Updated src/pygent/core/agent.py:
+    * Added _cancellation_token private attribute
+    * Added cancel(reason) method for external cancellation
+    * Added is_cancelled property to check cancellation state
+    * Create fresh CancellationToken at start of each run()
+    * Pass token to conversation_loop()
+    * Clear token in finally block after run completes
+  - Updated src/pygent/core/parallel.py:
+    * Added cancellation_token parameter to execute_tools_parallel()
+    * Check cancellation between batches (not mid-batch)
+    * Return partial results for completed batches if cancelled
+  - Created tests/test_core/test_cancellation.py with 32 tests:
+    * TestCancellationToken: 7 tests for token state management
+    * TestCancellationTokenRaiseIfCancelled: 3 tests for raise_if_cancelled
+    * TestCancellationTokenWaitForCancellation: 3 async tests for waiting
+    * TestCancellationError: 3 tests for exception class
+    * TestCancellationTokenInLoopEvent: 2 tests for LoopEvent fields
+    * TestCancellationInConversationLoop: 2 async tests for loop cancellation
+    * TestCancellationInAgent: 3 tests for Agent.cancel()
+    * TestCancellationInParallel: 2 tests for parallel execution
+    * TestPropertyBasedCancellation: 2 hypothesis tests
+    * TestEdgeCases: 4 tests for edge cases
+    * TestIntegration: 1 full integration test
+  - Learned: asyncio.Event provides clean async coordination for cancellation
+  - Learned: Cancellation should be checked at safe points (iteration start, between batches)
+  - Learned: Let running tools complete before checking cancellation for clean state
+  - Learned: Fresh token per run() prevents stale cancellation state from previous runs
+  - Learned: Idempotent cancel() prevents race conditions with multiple callers
+  - Learned: Session requires id parameter when creating instances in tests
+  - Phase 4 of Agent Loop Improvements complete
+  - All 4 phases of AGENT_LOOP_IMPROVEMENTS.md now complete
+  - Total: 1393 tests pass
