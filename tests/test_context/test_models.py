@@ -11,98 +11,79 @@ from pygent.context.models import (
     TestFramework,
 )
 
-# TestFramework enum tests
+# Enum tests (consolidated)
 
 
-def test_test_framework_values():
-    """Test TestFramework enum has expected values."""
-    assert TestFramework.PYTEST.value == "pytest"
-    assert TestFramework.UNITTEST.value == "unittest"
-    assert TestFramework.JEST.value == "jest"
-    assert TestFramework.MOCHA.value == "mocha"
-    assert TestFramework.VITEST.value == "vitest"
-    assert TestFramework.GO_TEST.value == "go test"
-    assert TestFramework.CARGO_TEST.value == "cargo test"
-    assert TestFramework.UNKNOWN.value == "unknown"
+class TestEnums:
+    """Tests for TestFramework and ProjectType enums."""
 
-
-def test_test_framework_from_string():
-    """Test creating TestFramework from string value."""
-    assert TestFramework("pytest") == TestFramework.PYTEST
-    assert TestFramework("jest") == TestFramework.JEST
-    assert TestFramework("unknown") == TestFramework.UNKNOWN
-
-
-def test_test_framework_invalid():
-    """Test invalid TestFramework value raises error."""
-    with pytest.raises(ValueError):
-        TestFramework("invalid_framework")
-
-
-# ProjectType enum tests
-
-
-def test_project_type_values():
-    """Test ProjectType enum has expected values."""
-    assert ProjectType.PYTHON.value == "python"
-    assert ProjectType.NODE.value == "node"
-    assert ProjectType.GO.value == "go"
-    assert ProjectType.RUST.value == "rust"
-    assert ProjectType.UNKNOWN.value == "unknown"
-
-
-def test_project_type_from_string():
-    """Test creating ProjectType from string value."""
-    assert ProjectType("python") == ProjectType.PYTHON
-    assert ProjectType("node") == ProjectType.NODE
-    assert ProjectType("unknown") == ProjectType.UNKNOWN
-
-
-def test_project_type_invalid():
-    """Test invalid ProjectType value raises error."""
-    with pytest.raises(ValueError):
-        ProjectType("invalid_type")
-
-
-# GitInfo model tests
-
-
-def test_git_info_defaults():
-    """Test GitInfo default values."""
-    info = GitInfo()
-    assert info.branch is None
-    assert info.remote is None
-    assert info.has_changes is False
-    assert info.commit_count == 0
-    assert info.last_commit is None
-
-
-def test_git_info_with_values():
-    """Test GitInfo with explicit values."""
-    info = GitInfo(
-        branch="main",
-        remote="https://github.com/user/repo.git",
-        has_changes=True,
-        commit_count=42,
-        last_commit="abc123",
+    @pytest.mark.parametrize(
+        "enum_cls,value,expected",
+        [
+            (TestFramework, "pytest", TestFramework.PYTEST),
+            (TestFramework, "unittest", TestFramework.UNITTEST),
+            (TestFramework, "jest", TestFramework.JEST),
+            (TestFramework, "mocha", TestFramework.MOCHA),
+            (TestFramework, "vitest", TestFramework.VITEST),
+            (TestFramework, "go test", TestFramework.GO_TEST),
+            (TestFramework, "cargo test", TestFramework.CARGO_TEST),
+            (TestFramework, "unknown", TestFramework.UNKNOWN),
+            (ProjectType, "python", ProjectType.PYTHON),
+            (ProjectType, "node", ProjectType.NODE),
+            (ProjectType, "go", ProjectType.GO),
+            (ProjectType, "rust", ProjectType.RUST),
+            (ProjectType, "unknown", ProjectType.UNKNOWN),
+        ],
     )
-    assert info.branch == "main"
-    assert info.remote == "https://github.com/user/repo.git"
-    assert info.has_changes is True
-    assert info.commit_count == 42
-    assert info.last_commit == "abc123"
+    def test_enum_values_and_from_string(self, enum_cls, value: str, expected):
+        """Test enum values and construction from string."""
+        assert expected.value == value
+        assert enum_cls(value) == expected
+
+    @pytest.mark.parametrize("enum_cls", [TestFramework, ProjectType])
+    def test_invalid_enum_raises_error(self, enum_cls):
+        """Test invalid enum value raises ValueError."""
+        with pytest.raises(ValueError):
+            enum_cls("invalid_value")
 
 
-def test_git_info_serialization():
-    """Test GitInfo JSON serialization."""
-    info = GitInfo(branch="main", has_changes=True)
-    data = info.model_dump()
-    assert data["branch"] == "main"
-    assert data["has_changes"] is True
+# GitInfo model tests (consolidated)
 
-    # Can reconstruct from dict
-    info2 = GitInfo.model_validate(data)
-    assert info2.branch == "main"
+
+class TestGitInfo:
+    """Tests for GitInfo model."""
+
+    def test_defaults_and_explicit_values(self):
+        """Test GitInfo with defaults and explicit values."""
+        default = GitInfo()
+        assert (default.branch, default.remote, default.has_changes, default.commit_count, default.last_commit) == (
+            None,
+            None,
+            False,
+            0,
+            None,
+        )
+        explicit = GitInfo(
+            branch="main",
+            remote="https://github.com/user/repo.git",
+            has_changes=True,
+            commit_count=42,
+            last_commit="abc123",
+        )
+        assert (
+            explicit.branch,
+            explicit.remote,
+            explicit.has_changes,
+            explicit.commit_count,
+            explicit.last_commit,
+        ) == ("main", "https://github.com/user/repo.git", True, 42, "abc123")
+
+    def test_serialization_roundtrip(self):
+        """Test GitInfo JSON serialization roundtrip."""
+        info = GitInfo(branch="main", has_changes=True)
+        data = info.model_dump()
+        info2 = GitInfo.model_validate(data)
+        assert (info2.branch, info2.has_changes) == ("main", True)
 
 
 # ProjectContext model tests

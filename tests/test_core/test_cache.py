@@ -17,73 +17,40 @@ from pygent.core.cache import (
 )
 
 
-class TestCacheEntry:
-    """Tests for CacheEntry dataclass."""
+class TestCacheDataclasses:
+    """Tests for CacheEntry and CacheStats dataclasses."""
 
-    def test_cache_entry_creation(self) -> None:
-        """Test creating a CacheEntry."""
-        entry = CacheEntry(
-            value="test result",
-            expires_at=time.time() + 60,
-            tool_name="read_file",
-            args_hash="abc123",
-        )
-        assert entry.value == "test result"
-        assert entry.tool_name == "read_file"
-        assert entry.args_hash == "abc123"
-
-    def test_cache_entry_expiration(self) -> None:
-        """Test cache entry expiration tracking."""
+    def test_cache_entry(self) -> None:
+        """Test CacheEntry creation and fields."""
         now = time.time()
-        entry = CacheEntry(
-            value="result",
-            expires_at=now + 100,
-            tool_name="test",
-            args_hash="hash",
-        )
+        entry = CacheEntry(value="test result", expires_at=now + 60, tool_name="read_file", args_hash="abc123")
+        assert (entry.value, entry.tool_name, entry.args_hash) == ("test result", "read_file", "abc123")
         assert entry.expires_at > now
 
-
-class TestCacheStats:
-    """Tests for CacheStats dataclass."""
-
-    def test_cache_stats_defaults(self) -> None:
-        """Test default values for CacheStats."""
+    def test_cache_stats(self) -> None:
+        """Test CacheStats defaults and incrementing."""
         stats = CacheStats()
-        assert stats.hits == 0
-        assert stats.misses == 0
-        assert stats.evictions == 0
-        assert stats.invalidations == 0
-
-    def test_cache_stats_incrementing(self) -> None:
-        """Test incrementing CacheStats values."""
-        stats = CacheStats()
-        stats.hits += 1
-        stats.misses += 2
-        stats.evictions += 3
-        stats.invalidations += 4
-        assert stats.hits == 1
-        assert stats.misses == 2
-        assert stats.evictions == 3
-        assert stats.invalidations == 4
+        assert (stats.hits, stats.misses, stats.evictions, stats.invalidations) == (0, 0, 0, 0)
+        stats.hits, stats.misses, stats.evictions, stats.invalidations = 1, 2, 3, 4
+        assert (stats.hits, stats.misses, stats.evictions, stats.invalidations) == (1, 2, 3, 4)
 
 
 class TestDefaultToolTTL:
     """Tests for DEFAULT_TOOL_TTL constant."""
 
-    def test_git_tools_have_short_ttl(self) -> None:
-        """Test that git status tools have short TTL."""
-        assert DEFAULT_TOOL_TTL["git_status"] <= 10
-        assert DEFAULT_TOOL_TTL["git_diff"] <= 10
-
-    def test_search_tools_have_medium_ttl(self) -> None:
-        """Test that search tools have medium TTL."""
-        assert 20 <= DEFAULT_TOOL_TTL["grep_search"] <= 60
-        assert 20 <= DEFAULT_TOOL_TTL["find_files"] <= 60
-
-    def test_template_listing_has_long_ttl(self) -> None:
-        """Test that template listing has long TTL."""
-        assert DEFAULT_TOOL_TTL["list_templates"] >= 300
+    @pytest.mark.parametrize(
+        "tool_name,min_ttl,max_ttl",
+        [
+            ("git_status", 1, 10),
+            ("git_diff", 1, 10),
+            ("grep_search", 20, 60),
+            ("find_files", 20, 60),
+            ("list_templates", 300, 3600),
+        ],
+    )
+    def test_tool_ttl_ranges(self, tool_name: str, min_ttl: int, max_ttl: int) -> None:
+        """Test that tools have expected TTL ranges."""
+        assert min_ttl <= DEFAULT_TOOL_TTL[tool_name] <= max_ttl
 
 
 class TestToolCache:
@@ -310,60 +277,31 @@ class TestToolCacheInvalidation:
         assert await cache.get("read_file", {"path": "/long.txt"}) == "long"
 
 
-class TestToolCacheKeyGeneration:
-    """Tests for cache key generation."""
-
-    @pytest.fixture
-    def cache(self) -> ToolCache:
-        """Create a ToolCache instance."""
-        return ToolCache()
-
-    def test_key_generation_deterministic(self, cache: ToolCache) -> None:
-        """Test that key generation is deterministic."""
-        args = {"path": "/test.txt", "encoding": "utf-8"}
-        key1 = cache._generate_key("read_file", args)
-        key2 = cache._generate_key("read_file", args)
-        assert key1 == key2
-
-    def test_key_generation_order_independent(self, cache: ToolCache) -> None:
-        """Test that argument order doesn't affect key."""
-        args1 = {"path": "/test.txt", "encoding": "utf-8"}
-        args2 = {"encoding": "utf-8", "path": "/test.txt"}
-        key1 = cache._generate_key("read_file", args1)
-        key2 = cache._generate_key("read_file", args2)
-        assert key1 == key2
-
-    def test_key_generation_different_tools(self, cache: ToolCache) -> None:
-        """Test that different tools produce different keys."""
-        args = {"path": "/test.txt"}
-        key1 = cache._generate_key("read_file", args)
-        key2 = cache._generate_key("list_files", args)
-        assert key1 != key2
-
-    def test_key_generation_different_args(self, cache: ToolCache) -> None:
-        """Test that different args produce different keys."""
-        key1 = cache._generate_key("read_file", {"path": "/a.txt"})
-        key2 = cache._generate_key("read_file", {"path": "/b.txt"})
-        assert key1 != key2
-
-
-class TestToolCacheTTL:
-    """Tests for TTL handling."""
+class TestToolCacheKeyGenerationAndTTL:
+    """Tests for cache key generation and TTL handling."""
 
     @pytest.fixture
     def cache(self) -> ToolCache:
         """Create a ToolCache instance."""
         return ToolCache(default_ttl=60)
 
-    def test_get_ttl_default(self, cache: ToolCache) -> None:
-        """Test default TTL is used for unknown tools."""
-        ttl = cache._get_ttl("unknown_tool")
-        assert ttl == 60
+    def test_key_generation_deterministic_and_order_independent(self, cache: ToolCache) -> None:
+        """Test key generation is deterministic and argument order independent."""
+        args1, args2 = {"path": "/test.txt", "encoding": "utf-8"}, {"encoding": "utf-8", "path": "/test.txt"}
+        assert cache._generate_key("read_file", args1) == cache._generate_key("read_file", args2)
 
-    def test_get_ttl_configured(self, cache: ToolCache) -> None:
-        """Test configured TTL is used for known tools."""
-        ttl = cache._get_ttl("git_status")
-        assert ttl == DEFAULT_TOOL_TTL["git_status"]
+    def test_key_generation_differs_for_different_inputs(self, cache: ToolCache) -> None:
+        """Test different tools/args produce different keys."""
+        args = {"path": "/test.txt"}
+        assert cache._generate_key("read_file", args) != cache._generate_key("list_files", args)
+        assert cache._generate_key("read_file", {"path": "/a.txt"}) != cache._generate_key(
+            "read_file", {"path": "/b.txt"}
+        )
+
+    def test_ttl_handling(self, cache: ToolCache) -> None:
+        """Test TTL uses default for unknown tools, configured for known."""
+        assert cache._get_ttl("unknown_tool") == 60
+        assert cache._get_ttl("git_status") == DEFAULT_TOOL_TTL["git_status"]
 
 
 class TestToolCacheConcurrency:

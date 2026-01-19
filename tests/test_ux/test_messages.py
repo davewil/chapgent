@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -14,29 +15,15 @@ from pygent.ux.messages import (
 )
 
 
-class TestErrorMessages:
+class TestErrorMessagesConstant:
     """Tests for ERROR_MESSAGES constant."""
 
-    def test_error_messages_is_dict(self) -> None:
-        """ERROR_MESSAGES should be a dictionary."""
-        assert isinstance(ERROR_MESSAGES, dict)
-
-    def test_error_messages_not_empty(self) -> None:
-        """ERROR_MESSAGES should contain entries."""
-        assert len(ERROR_MESSAGES) > 0
-
-    def test_error_messages_keys_are_strings(self) -> None:
-        """All keys should be strings."""
-        for key in ERROR_MESSAGES.keys():
-            assert isinstance(key, str)
-
-    def test_error_messages_values_are_strings(self) -> None:
-        """All values should be strings."""
-        for value in ERROR_MESSAGES.values():
-            assert isinstance(value, str)
-
-    def test_common_error_codes_exist(self) -> None:
-        """Common error codes should exist."""
+    def test_error_messages_structure(self) -> None:
+        """ERROR_MESSAGES should be a dict with string keys/values and common codes."""
+        assert isinstance(ERROR_MESSAGES, dict) and len(ERROR_MESSAGES) > 0
+        for key, value in ERROR_MESSAGES.items():
+            assert isinstance(key, str) and isinstance(value, str)
+            assert len(value.strip()) > 10, f"Error {key} message too short"
         expected_codes = [
             "no_api_key",
             "invalid_api_key",
@@ -50,173 +37,115 @@ class TestErrorMessages:
         for code in expected_codes:
             assert code in ERROR_MESSAGES, f"Missing error code: {code}"
 
-    def test_error_messages_have_content(self) -> None:
-        """All error messages should have meaningful content."""
-        for code, message in ERROR_MESSAGES.items():
-            assert len(message.strip()) > 10, f"Error {code} message too short"
-
 
 class TestGetErrorMessage:
     """Tests for get_error_message function."""
 
-    def test_get_existing_message(self) -> None:
-        """Should return message for existing code."""
-        result = get_error_message("no_api_key")
-        assert result is not None
-        assert "API key" in result
+    @pytest.mark.parametrize(
+        "code,expected_substring",
+        [("no_api_key", "API key"), ("file_not_found", "File not found"), ("git_not_repo", "git")],
+    )
+    def test_get_existing_message(self, code: str, expected_substring: str) -> None:
+        """Should return message for existing code with expected content."""
+        result = get_error_message(code)
+        assert result is not None and expected_substring.lower() in result.lower()
 
     def test_get_nonexistent_message(self) -> None:
         """Should return None for nonexistent code."""
-        result = get_error_message("nonexistent_error_code")
-        assert result is None
-
-    def test_get_file_not_found_message(self) -> None:
-        """Should return file not found message."""
-        result = get_error_message("file_not_found")
-        assert result is not None
-        assert "File not found" in result
-
-    def test_get_git_not_repo_message(self) -> None:
-        """Should return git not repo message."""
-        result = get_error_message("git_not_repo")
-        assert result is not None
-        assert "git" in result.lower()
+        assert get_error_message("nonexistent_error_code") is None
 
 
 class TestFormatErrorMessage:
     """Tests for format_error_message function."""
 
-    def test_format_with_no_placeholders(self) -> None:
-        """Should work with messages that have no placeholders."""
-        result = format_error_message("no_api_key")
-        assert "API key" in result
-
-    def test_format_with_path_placeholder(self) -> None:
-        """Should substitute path placeholder."""
-        result = format_error_message("file_not_found", path="/foo/bar.txt")
-        assert "/foo/bar.txt" in result
-
-    def test_format_with_model_placeholder(self) -> None:
-        """Should substitute model placeholder."""
-        result = format_error_message("model_not_found", model="gpt-5-turbo")
-        assert "gpt-5-turbo" in result
-
-    def test_format_with_timeout_placeholder(self) -> None:
-        """Should substitute timeout placeholder."""
-        result = format_error_message("timeout", timeout="60")
-        assert "60" in result
+    @pytest.mark.parametrize(
+        "code,kwargs,expected_in_result",
+        [
+            ("no_api_key", {}, "API key"),
+            ("file_not_found", {"path": "/foo/bar.txt"}, "/foo/bar.txt"),
+            ("model_not_found", {"model": "gpt-5-turbo"}, "gpt-5-turbo"),
+            ("timeout", {"timeout": "60"}, "60"),
+        ],
+    )
+    def test_format_with_placeholders(self, code: str, kwargs: dict, expected_in_result: str) -> None:
+        """Should substitute placeholders or return template."""
+        result = format_error_message(code, **kwargs)
+        assert expected_in_result in result
 
     def test_format_nonexistent_code(self) -> None:
         """Should return generic message for unknown code."""
         result = format_error_message("totally_unknown_code")
-        assert "error occurred" in result.lower()
-        assert "totally_unknown_code" in result
+        assert "error occurred" in result.lower() and "totally_unknown_code" in result
 
-    def test_format_with_missing_placeholder(self) -> None:
-        """Should handle missing placeholder values gracefully."""
-        result = format_error_message("file_not_found")
-        # Should return template as-is if placeholder missing
-        assert "{path}" in result or "File not found" in result
-
-    def test_format_with_extra_kwargs(self) -> None:
-        """Should ignore extra kwargs."""
-        result = format_error_message("no_api_key", extra_param="ignored")
-        assert "API key" in result
+    def test_format_handles_missing_and_extra_kwargs(self) -> None:
+        """Should handle missing placeholders and ignore extra kwargs."""
+        result1 = format_error_message("file_not_found")
+        assert "{path}" in result1 or "File not found" in result1
+        result2 = format_error_message("no_api_key", extra_param="ignored")
+        assert "API key" in result2
 
 
 class TestClassifyError:
     """Tests for classify_error function."""
 
-    def test_classify_file_not_found(self) -> None:
-        """Should classify FileNotFoundError."""
-        error = FileNotFoundError("/path/to/file")
+    @pytest.mark.parametrize(
+        "error,expected_code,has_path",
+        [
+            (FileNotFoundError("/path/to/file"), "file_not_found", True),
+            (PermissionError("/protected/file"), "permission_denied", True),
+            (TimeoutError("Request timed out"), "timeout", False),
+        ],
+    )
+    def test_classify_builtin_errors(self, error: Exception, expected_code: str, has_path: bool) -> None:
+        """Should classify builtin error types."""
         code, context = classify_error(error)
-        assert code == "file_not_found"
-        assert "path" in context
+        assert code == expected_code
+        if has_path:
+            assert "path" in context
 
-    def test_classify_permission_error(self) -> None:
-        """Should classify PermissionError."""
-        error = PermissionError("/protected/file")
-        code, context = classify_error(error)
-        assert code == "permission_denied"
-        assert "path" in context
-
-    def test_classify_timeout_error(self) -> None:
-        """Should classify TimeoutError."""
-        error = TimeoutError("Request timed out")
-        code, context = classify_error(error)
-        assert code == "timeout"
-
-    def test_classify_api_key_error(self) -> None:
-        """Should classify API key related errors."""
-        error = Exception("No api_key found")
-        code, _ = classify_error(error)
-        assert code == "no_api_key"
-
-    def test_classify_invalid_api_key_error(self) -> None:
-        """Should classify invalid API key errors."""
-        error = Exception("Invalid API key")
-        code, _ = classify_error(error)
-        assert code == "invalid_api_key"
-
-    def test_classify_rate_limit_error(self) -> None:
-        """Should classify rate limit errors."""
-        error = Exception("Rate limit exceeded")
-        code, _ = classify_error(error)
-        assert code == "rate_limit"
-
-    def test_classify_network_error(self) -> None:
-        """Should classify network errors."""
-        error = Exception("Connection error: network unreachable")
-        code, _ = classify_error(error)
-        assert code == "network_error"
-
-    def test_classify_git_not_repo(self) -> None:
-        """Should classify git not a repository errors."""
-        error = Exception("fatal: not a git repository")
-        code, _ = classify_error(error)
-        assert code == "git_not_repo"
+    @pytest.mark.parametrize(
+        "message,expected_code",
+        [
+            ("No api_key found", "no_api_key"),
+            ("Invalid API key", "invalid_api_key"),
+            ("Rate limit exceeded", "rate_limit"),
+            ("Connection error: network unreachable", "network_error"),
+            ("fatal: not a git repository", "git_not_repo"),
+        ],
+    )
+    def test_classify_by_message(self, message: str, expected_code: str) -> None:
+        """Should classify errors by message content."""
+        code, _ = classify_error(Exception(message))
+        assert code == expected_code
 
     def test_classify_unknown_error(self) -> None:
         """Should return config_invalid for unknown errors."""
-        error = Exception("Some random error")
-        code, context = classify_error(error)
-        assert code == "config_invalid"
-        assert "error" in context
+        code, context = classify_error(Exception("Some random error"))
+        assert code == "config_invalid" and "error" in context
 
 
 class TestGetSuggestionForError:
     """Tests for get_suggestion_for_error function."""
 
-    def test_get_suggestion_for_no_api_key(self) -> None:
-        """Should return suggestion for no API key."""
-        suggestion = get_suggestion_for_error("no_api_key")
-        assert suggestion is not None
-        assert "ANTHROPIC_API_KEY" in suggestion
+    @pytest.mark.parametrize(
+        "code,expected_substring",
+        [("no_api_key", "ANTHROPIC_API_KEY"), ("git_not_repo", "git init"), ("rate_limit", "wait")],
+    )
+    def test_get_known_suggestions(self, code: str, expected_substring: str) -> None:
+        """Should return appropriate suggestions."""
+        suggestion = get_suggestion_for_error(code)
+        assert suggestion is not None and expected_substring.lower() in suggestion.lower()
 
-    def test_get_suggestion_for_git_not_repo(self) -> None:
-        """Should return suggestion for git not repo."""
-        suggestion = get_suggestion_for_error("git_not_repo")
-        assert suggestion is not None
-        assert "git init" in suggestion
-
-    def test_get_suggestion_for_rate_limit(self) -> None:
-        """Should return suggestion for rate limit."""
-        suggestion = get_suggestion_for_error("rate_limit")
-        assert suggestion is not None
-        assert "wait" in suggestion.lower()
-
-    def test_get_suggestion_for_unknown_code(self) -> None:
+    def test_get_suggestion_unknown_code(self) -> None:
         """Should return None for unknown code."""
-        suggestion = get_suggestion_for_error("unknown_error_xyz")
-        assert suggestion is None
+        assert get_suggestion_for_error("unknown_error_xyz") is None
 
     def test_suggestions_are_concise(self) -> None:
-        """Suggestions should be concise."""
+        """Suggestions should be under 100 chars."""
         for code in ["no_api_key", "file_not_found", "git_not_repo"]:
             suggestion = get_suggestion_for_error(code)
             if suggestion:
-                assert len(suggestion) < 100, f"Suggestion for {code} too long"
+                assert len(suggestion) < 100
 
 
 class TestPropertyBased:

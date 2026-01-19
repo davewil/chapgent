@@ -26,125 +26,72 @@ from pygent.tools.scaffold import (
 )
 
 # ============================================================================
-# Helper Function Tests
+# Helper Function Tests (Consolidated)
 # ============================================================================
 
 
-class TestNormalizeProjectName:
-    """Tests for _normalize_project_name."""
-
-    def test_basic_name(self) -> None:
-        """Test basic project name."""
-        assert _normalize_project_name("myproject") == "myproject"
-
-    def test_hyphen_to_underscore(self) -> None:
-        """Test hyphens are converted to underscores."""
-        assert _normalize_project_name("my-project") == "my_project"
-
-    def test_uppercase_to_lowercase(self) -> None:
-        """Test uppercase is converted to lowercase."""
-        assert _normalize_project_name("MyProject") == "myproject"
-
-    def test_invalid_chars_removed(self) -> None:
-        """Test invalid characters are removed."""
-        assert _normalize_project_name("my@project!") == "myproject"
-
-    def test_leading_digit(self) -> None:
-        """Test leading digit gets underscore prefix."""
-        assert _normalize_project_name("123project") == "_123project"
-
-    def test_complex_name(self) -> None:
-        """Test complex name with multiple transformations."""
-        assert _normalize_project_name("My-Awesome@Project123") == "my_awesomeproject123"
-
-    def test_empty_name(self) -> None:
-        """Test empty name after normalization."""
-        assert _normalize_project_name("@@@") == ""
+@pytest.mark.parametrize(
+    "input_name,expected",
+    [
+        ("myproject", "myproject"),
+        ("my-project", "my_project"),
+        ("MyProject", "myproject"),
+        ("my@project!", "myproject"),
+        ("123project", "_123project"),
+        ("My-Awesome@Project123", "my_awesomeproject123"),
+        ("@@@", ""),
+    ],
+)
+def test_normalize_project_name(input_name: str, expected: str) -> None:
+    """Test _normalize_project_name with various inputs."""
+    assert _normalize_project_name(input_name) == expected
 
 
-class TestToClassName:
-    """Tests for _to_class_name."""
-
-    def test_lowercase(self) -> None:
-        """Test lowercase becomes PascalCase."""
-        assert _to_class_name("user") == "User"
-
-    def test_underscore_separated(self) -> None:
-        """Test underscore-separated words."""
-        assert _to_class_name("user_model") == "UserModel"
-
-    def test_hyphen_separated(self) -> None:
-        """Test hyphen-separated words."""
-        assert _to_class_name("user-service") == "UserService"
-
-    def test_mixed_separators(self) -> None:
-        """Test mixed separators."""
-        assert _to_class_name("my-user_model") == "MyUserModel"
-
-    def test_already_pascal_case(self) -> None:
-        """Test already PascalCase (gets lowered then re-cased)."""
-        assert _to_class_name("UserModel") == "Usermodel"
+@pytest.mark.parametrize(
+    "input_name,expected",
+    [
+        ("user", "User"),
+        ("user_model", "UserModel"),
+        ("user-service", "UserService"),
+        ("my-user_model", "MyUserModel"),
+        ("UserModel", "Usermodel"),
+    ],
+)
+def test_to_class_name(input_name: str, expected: str) -> None:
+    """Test _to_class_name with various inputs."""
+    assert _to_class_name(input_name) == expected
 
 
-class TestEvaluateCondition:
-    """Tests for _evaluate_condition."""
-
-    def test_no_condition(self) -> None:
-        """Test None condition returns True."""
-        assert _evaluate_condition(None, {}) is True
-
-    def test_simple_true(self) -> None:
-        """Test simple truthy condition."""
-        assert _evaluate_condition("use_typer", {"use_typer": True}) is True
-
-    def test_simple_false(self) -> None:
-        """Test simple falsy condition."""
-        assert _evaluate_condition("use_typer", {"use_typer": False}) is False
-
-    def test_missing_variable(self) -> None:
-        """Test missing variable is False."""
-        assert _evaluate_condition("unknown", {}) is False
-
-    def test_not_true(self) -> None:
-        """Test 'not' with truthy value."""
-        assert _evaluate_condition("not use_typer", {"use_typer": True}) is False
-
-    def test_not_false(self) -> None:
-        """Test 'not' with falsy value."""
-        assert _evaluate_condition("not use_typer", {"use_typer": False}) is True
-
-    def test_not_missing(self) -> None:
-        """Test 'not' with missing variable."""
-        assert _evaluate_condition("not unknown", {}) is True
+@pytest.mark.parametrize(
+    "condition,context,expected",
+    [
+        (None, {}, True),
+        ("use_typer", {"use_typer": True}, True),
+        ("use_typer", {"use_typer": False}, False),
+        ("unknown", {}, False),
+        ("not use_typer", {"use_typer": True}, False),
+        ("not use_typer", {"use_typer": False}, True),
+        ("not unknown", {}, True),
+    ],
+)
+def test_evaluate_condition(condition: str | None, context: dict, expected: bool) -> None:
+    """Test _evaluate_condition with various inputs."""
+    assert _evaluate_condition(condition, context) is expected
 
 
-class TestRenderTemplate:
-    """Tests for _render_template."""
-
-    def test_simple_replacement(self) -> None:
-        """Test simple variable replacement."""
-        result = _render_template("Hello {name}!", {"name": "World"})
-        assert result == "Hello World!"
-
-    def test_multiple_replacements(self) -> None:
-        """Test multiple variable replacements."""
-        result = _render_template("{a} and {b}", {"a": "foo", "b": "bar"})
-        assert result == "foo and bar"
-
-    def test_escaped_braces(self) -> None:
-        """Test escaped braces become single braces."""
-        result = _render_template("dict = {{'key': {{value}}}}", {"value": "123"})
-        assert result == "dict = {'key': {value}}"
-
-    def test_mixed_escaped_and_unescaped(self) -> None:
-        """Test mix of escaped and unescaped braces."""
-        result = _render_template("Hello {name}, use {{braces}}", {"name": "World"})
-        assert result == "Hello World, use {braces}"
-
-    def test_unused_context(self) -> None:
-        """Test unused context variables are ignored."""
-        result = _render_template("Hello {name}!", {"name": "World", "unused": "foo"})
-        assert result == "Hello World!"
+@pytest.mark.parametrize(
+    "template,context,expected",
+    [
+        ("Hello {name}!", {"name": "World"}, "Hello World!"),
+        ("{a} and {b}", {"a": "foo", "b": "bar"}, "foo and bar"),
+        ("dict = {{'key': {{value}}}}", {"value": "123"}, "dict = {'key': {value}}"),
+        ("Hello {name}, use {{braces}}", {"name": "World"}, "Hello World, use {braces}"),
+        ("Hello {name}!", {"name": "World", "unused": "foo"}, "Hello World!"),
+    ],
+)
+def test_render_template(template: str, context: dict, expected: str) -> None:
+    """Test _render_template with various inputs."""
+    assert _render_template(template, context) == expected
 
 
 class TestDetectProjectName:
@@ -154,7 +101,6 @@ class TestDetectProjectName:
         """Test detection from pyproject.toml."""
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text('[project]\nname = "my-awesome-project"\nversion = "0.1.0"')
-
         assert _detect_project_name(tmp_path) == "my_awesome_project"
 
     def test_from_directory(self, tmp_path) -> None:
@@ -165,237 +111,139 @@ class TestDetectProjectName:
         """Test hyphenated directory name."""
         project_dir = tmp_path / "my-project"
         project_dir.mkdir()
-
         assert _detect_project_name(project_dir) == "my_project"
 
 
 # ============================================================================
-# Data Model Tests
+# Data Model Tests (Consolidated)
 # ============================================================================
 
 
-class TestTemplateOption:
-    """Tests for TemplateOption dataclass."""
+class TestDataModels:
+    """Tests for scaffold data model dataclasses."""
 
-    def test_basic_option(self) -> None:
-        """Test basic option creation."""
-        opt = TemplateOption(
-            name="use_docker",
-            option_type="bool",
-            default=False,
-            description="Include Docker support",
+    def test_template_option_basic(self) -> None:
+        """Test TemplateOption creation with basic and choice options."""
+        basic_opt = TemplateOption(name="use_docker", option_type="bool", default=False, description="Include Docker")
+        assert (basic_opt.name, basic_opt.option_type, basic_opt.default, basic_opt.choices) == (
+            "use_docker",
+            "bool",
+            False,
+            None,
         )
-        assert opt.name == "use_docker"
-        assert opt.option_type == "bool"
-        assert opt.default is False
-        assert opt.choices is None
 
-    def test_choice_option(self) -> None:
-        """Test choice option."""
-        opt = TemplateOption(
+        choice_opt = TemplateOption(
             name="database",
             option_type="choice",
             default="postgres",
-            description="Database type",
+            description="DB type",
             choices=["postgres", "mysql", "sqlite"],
         )
-        assert opt.choices == ["postgres", "mysql", "sqlite"]
+        assert choice_opt.choices == ["postgres", "mysql", "sqlite"]
 
+    def test_template_file(self) -> None:
+        """Test TemplateFile creation with and without condition."""
+        basic = TemplateFile(path="src/{name}/__init__.py", content='"""Init."""')
+        assert (basic.path, basic.condition) == ("src/{name}/__init__.py", None)
 
-class TestTemplateFile:
-    """Tests for TemplateFile dataclass."""
+        conditional = TemplateFile(path="Dockerfile", content="FROM python:3.11", condition="include_docker")
+        assert conditional.condition == "include_docker"
 
-    def test_basic_file(self) -> None:
-        """Test basic file creation."""
-        f = TemplateFile(path="src/{name}/__init__.py", content='"""Init."""')
-        assert f.path == "src/{name}/__init__.py"
-        assert f.condition is None
-
-    def test_conditional_file(self) -> None:
-        """Test conditional file."""
-        f = TemplateFile(
-            path="Dockerfile",
-            content="FROM python:3.11",
-            condition="include_docker",
-        )
-        assert f.condition == "include_docker"
-
-
-class TestProjectTemplate:
-    """Tests for ProjectTemplate dataclass."""
-
-    def test_basic_template(self) -> None:
-        """Test basic template creation."""
+    def test_project_template(self) -> None:
+        """Test ProjectTemplate creation."""
         tmpl = ProjectTemplate(
             name="test-template",
             description="A test template",
             files=[TemplateFile("README.md", "# {name}")],
             options=[],
         )
-        assert tmpl.name == "test-template"
-        assert len(tmpl.files) == 1
-        assert tmpl.post_create_commands == []
-        assert tmpl.next_steps == []
+        assert (tmpl.name, len(tmpl.files), tmpl.post_create_commands, tmpl.next_steps) == ("test-template", 1, [], [])
 
-
-class TestComponentTemplate:
-    """Tests for ComponentTemplate dataclass."""
-
-    def test_basic_component(self) -> None:
-        """Test basic component creation."""
+    def test_component_template(self) -> None:
+        """Test ComponentTemplate creation."""
         comp = ComponentTemplate(
             name="model",
             description="Add a model",
             project_types=["python"],
             files=[TemplateFile("models/{name}.py", "class {class_name}: pass")],
         )
-        assert comp.name == "model"
-        assert comp.project_types == ["python"]
-        assert comp.modifications == {}
+        assert (comp.name, comp.project_types, comp.modifications) == ("model", ["python"], {})
 
 
 # ============================================================================
-# Built-in Template Tests
+# Built-in Template & Component Tests (Consolidated)
 # ============================================================================
 
 
-class TestBuiltInTemplates:
-    """Tests for built-in templates."""
+class TestBuiltInTemplatesAndComponents:
+    """Tests for built-in templates and components."""
 
-    def test_templates_exist(self) -> None:
+    @pytest.mark.parametrize("template_name", ["python-cli", "python-lib", "fastapi"])
+    def test_templates_exist(self, template_name: str) -> None:
         """Test that expected templates exist."""
-        assert "python-cli" in TEMPLATES
-        assert "python-lib" in TEMPLATES
-        assert "fastapi" in TEMPLATES
+        assert template_name in TEMPLATES
 
-    def test_python_cli_template(self) -> None:
-        """Test python-cli template structure."""
+    def test_python_cli_template_structure(self) -> None:
+        """Test python-cli template has expected structure and options."""
         tmpl = TEMPLATES["python-cli"]
         assert tmpl.description == "Python CLI application with Click"
-
-        # Check key files exist
         file_paths = [f.path for f in tmpl.files]
-        assert "pyproject.toml" in file_paths
-        assert "src/{name}/__init__.py" in file_paths
-        assert "README.md" in file_paths
-        assert ".gitignore" in file_paths
-
-    def test_python_cli_options(self) -> None:
-        """Test python-cli has expected options."""
-        tmpl = TEMPLATES["python-cli"]
+        for expected in ["pyproject.toml", "src/{name}/__init__.py", "README.md", ".gitignore"]:
+            assert expected in file_paths
         option_names = [o.name for o in tmpl.options]
+        assert "use_typer" in option_names and "include_docker" in option_names
 
-        assert "use_typer" in option_names
-        assert "include_docker" in option_names
-
-    def test_fastapi_template(self) -> None:
-        """Test fastapi template structure."""
+    def test_fastapi_template_structure(self) -> None:
+        """Test fastapi template has expected structure."""
         tmpl = TEMPLATES["fastapi"]
         assert tmpl.description == "FastAPI web application"
-
         file_paths = [f.path for f in tmpl.files]
-        assert "src/{name}/main.py" in file_paths
-        assert "src/{name}/api/routes.py" in file_paths
-        assert "src/{name}/core/config.py" in file_paths
+        for expected in ["src/{name}/main.py", "src/{name}/api/routes.py", "src/{name}/core/config.py"]:
+            assert expected in file_paths
 
-
-class TestBuiltInComponents:
-    """Tests for built-in components."""
-
-    def test_components_exist(self) -> None:
+    @pytest.mark.parametrize("component_name", ["model", "service", "test", "route", "cli_command"])
+    def test_components_exist(self, component_name: str) -> None:
         """Test that expected components exist."""
-        assert "model" in COMPONENTS
-        assert "service" in COMPONENTS
-        assert "test" in COMPONENTS
-        assert "route" in COMPONENTS
-        assert "cli_command" in COMPONENTS
+        assert component_name in COMPONENTS
 
-    def test_model_component(self) -> None:
-        """Test model component."""
-        comp = COMPONENTS["model"]
-        assert "python" in comp.project_types
-        assert len(comp.files) == 2  # model file + test file
-
-    def test_route_component(self) -> None:
-        """Test route component is fastapi-specific."""
-        comp = COMPONENTS["route"]
-        assert "fastapi" in comp.project_types
+    def test_component_project_types(self) -> None:
+        """Test components have correct project types."""
+        assert "python" in COMPONENTS["model"].project_types
+        assert len(COMPONENTS["model"].files) == 2  # model file + test file
+        assert "fastapi" in COMPONENTS["route"].project_types
 
 
 # ============================================================================
-# list_templates Tool Tests
+# list_templates & list_components Tool Tests (Consolidated)
 # ============================================================================
 
 
-class TestListTemplates:
-    """Tests for list_templates tool."""
+class TestListTools:
+    """Tests for list_templates and list_components tools."""
 
     @pytest.mark.asyncio
-    async def test_returns_json(self) -> None:
-        """Test that list_templates returns valid JSON."""
+    async def test_list_templates(self) -> None:
+        """Test list_templates returns valid JSON with expected structure."""
         result = await list_templates()
         templates = json.loads(result)
         assert isinstance(templates, list)
-
-    @pytest.mark.asyncio
-    async def test_contains_expected_templates(self) -> None:
-        """Test that result contains expected templates."""
-        result = await list_templates()
-        templates = json.loads(result)
         names = [t["name"] for t in templates]
-
-        assert "python-cli" in names
-        assert "python-lib" in names
-        assert "fastapi" in names
-
-    @pytest.mark.asyncio
-    async def test_template_structure(self) -> None:
-        """Test template structure in response."""
-        result = await list_templates()
-        templates = json.loads(result)
-
+        for expected in ["python-cli", "python-lib", "fastapi"]:
+            assert expected in names
         for tmpl in templates:
-            assert "name" in tmpl
-            assert "description" in tmpl
-            assert "options" in tmpl
-
-
-# ============================================================================
-# list_components Tool Tests
-# ============================================================================
-
-
-class TestListComponents:
-    """Tests for list_components tool."""
+            assert all(key in tmpl for key in ["name", "description", "options"])
 
     @pytest.mark.asyncio
-    async def test_returns_json(self) -> None:
-        """Test that list_components returns valid JSON."""
+    async def test_list_components(self) -> None:
+        """Test list_components returns valid JSON with expected structure."""
         result = await list_components()
         components = json.loads(result)
         assert isinstance(components, list)
-
-    @pytest.mark.asyncio
-    async def test_contains_expected_components(self) -> None:
-        """Test that result contains expected components."""
-        result = await list_components()
-        components = json.loads(result)
         names = [c["name"] for c in components]
-
-        assert "model" in names
-        assert "service" in names
-        assert "route" in names
-
-    @pytest.mark.asyncio
-    async def test_component_structure(self) -> None:
-        """Test component structure in response."""
-        result = await list_components()
-        components = json.loads(result)
-
+        for expected in ["model", "service", "route"]:
+            assert expected in names
         for comp in components:
-            assert "name" in comp
-            assert "description" in comp
-            assert "project_types" in comp
+            assert all(key in comp for key in ["name", "description", "project_types"])
 
 
 # ============================================================================

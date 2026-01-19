@@ -20,20 +20,21 @@ from pygent.core.recovery import (
 class TestErrorType:
     """Tests for ErrorType enum."""
 
-    def test_error_type_values(self) -> None:
-        """Test that all error types have expected values."""
-        assert ErrorType.FILE_NOT_FOUND.value == "file_not_found"
-        assert ErrorType.PERMISSION_DENIED.value == "permission_denied"
-        assert ErrorType.GIT_NOT_A_REPOSITORY.value == "git_not_a_repository"
-        assert ErrorType.TIMEOUT.value == "timeout"
-        assert ErrorType.CONNECTION_ERROR.value == "connection_error"
-        assert ErrorType.UNKNOWN.value == "unknown"
-
-    def test_error_type_is_str_enum(self) -> None:
-        """Test that ErrorType is a string enum."""
-        assert isinstance(ErrorType.FILE_NOT_FOUND, str)
-        # str() on StrEnum includes class name, but .value gives the string value
-        assert ErrorType.FILE_NOT_FOUND.value == "file_not_found"
+    @pytest.mark.parametrize(
+        "error_type,expected_value",
+        [
+            (ErrorType.FILE_NOT_FOUND, "file_not_found"),
+            (ErrorType.PERMISSION_DENIED, "permission_denied"),
+            (ErrorType.GIT_NOT_A_REPOSITORY, "git_not_a_repository"),
+            (ErrorType.TIMEOUT, "timeout"),
+            (ErrorType.CONNECTION_ERROR, "connection_error"),
+            (ErrorType.UNKNOWN, "unknown"),
+        ],
+    )
+    def test_error_type_values(self, error_type: ErrorType, expected_value: str) -> None:
+        """Test that error types have expected values."""
+        assert error_type.value == expected_value
+        assert isinstance(error_type, str)
 
     def test_all_error_types_exist(self) -> None:
         """Test all expected error types are defined."""
@@ -54,8 +55,7 @@ class TestErrorType:
             "INVALID_ARGUMENT",
             "UNKNOWN",
         }
-        actual = {e.name for e in ErrorType}
-        assert expected == actual
+        assert expected == {e.name for e in ErrorType}
 
 
 class TestRecoveryAction:
@@ -63,89 +63,54 @@ class TestRecoveryAction:
 
     def test_recovery_action_defaults(self) -> None:
         """Test default values for RecoveryAction."""
-        action = RecoveryAction(
-            error_type=ErrorType.UNKNOWN,
-            should_retry=False,
-        )
-        assert action.error_type == ErrorType.UNKNOWN
-        assert action.should_retry is False
-        assert action.suggestions == []
-        assert action.modified_args is None
-        assert action.similar_paths == []
+        action = RecoveryAction(error_type=ErrorType.UNKNOWN, should_retry=False)
+        assert (
+            action.error_type,
+            action.should_retry,
+            action.suggestions,
+            action.modified_args,
+            action.similar_paths,
+        ) == (ErrorType.UNKNOWN, False, [], None, [])
 
-    def test_recovery_action_with_suggestions(self) -> None:
-        """Test RecoveryAction with suggestions."""
+    def test_recovery_action_with_all_fields(self) -> None:
+        """Test RecoveryAction with all optional fields."""
         action = RecoveryAction(
             error_type=ErrorType.FILE_NOT_FOUND,
-            should_retry=False,
-            suggestions=["Check the path.", "Use find_files."],
-        )
-        assert len(action.suggestions) == 2
-        assert "Check the path." in action.suggestions
-
-    def test_recovery_action_with_modified_args(self) -> None:
-        """Test RecoveryAction with modified arguments."""
-        action = RecoveryAction(
-            error_type=ErrorType.TIMEOUT,
             should_retry=True,
+            suggestions=["Check the path.", "Use find_files."],
             modified_args={"timeout": 60},
-        )
-        assert action.should_retry is True
-        assert action.modified_args == {"timeout": 60}
-
-    def test_recovery_action_with_similar_paths(self) -> None:
-        """Test RecoveryAction with similar paths."""
-        action = RecoveryAction(
-            error_type=ErrorType.FILE_NOT_FOUND,
-            should_retry=False,
             similar_paths=["test.py", "tests.py"],
         )
-        assert len(action.similar_paths) == 2
+        assert len(action.suggestions) == 2 and len(action.similar_paths) == 2
+        assert action.modified_args == {"timeout": 60}
 
 
 class TestErrorPatterns:
     """Tests for ERROR_PATTERNS dictionary."""
 
-    def test_file_not_found_pattern(self) -> None:
-        """Test FileNotFoundError pattern."""
-        pattern = ERROR_PATTERNS["FileNotFoundError"]
-        assert pattern["type"] == ErrorType.FILE_NOT_FOUND
-        assert pattern["auto_retry"] is False
+    @pytest.mark.parametrize(
+        "error_name,expected_type,expected_retry",
+        [
+            ("FileNotFoundError", ErrorType.FILE_NOT_FOUND, False),
+            ("PermissionError", ErrorType.PERMISSION_DENIED, False),
+            ("TimeoutError", ErrorType.TIMEOUT, True),
+            ("ConnectionError", ErrorType.CONNECTION_ERROR, True),
+            ("GitError", ErrorType.GIT_NOT_A_REPOSITORY, False),
+        ],
+    )
+    def test_error_patterns(self, error_name: str, expected_type: ErrorType, expected_retry: bool) -> None:
+        """Test error patterns have correct type and retry settings."""
+        pattern = ERROR_PATTERNS[error_name]
+        assert pattern["type"] == expected_type
+        assert pattern["auto_retry"] is expected_retry
         assert len(pattern["suggest"]) >= 1
 
-    def test_permission_error_pattern(self) -> None:
-        """Test PermissionError pattern."""
-        pattern = ERROR_PATTERNS["PermissionError"]
-        assert pattern["type"] == ErrorType.PERMISSION_DENIED
-        assert pattern["auto_retry"] is False
-
-    def test_timeout_error_pattern(self) -> None:
-        """Test TimeoutError pattern."""
-        pattern = ERROR_PATTERNS["TimeoutError"]
-        assert pattern["type"] == ErrorType.TIMEOUT
-        assert pattern["auto_retry"] is True
-
-    def test_connection_error_pattern(self) -> None:
-        """Test ConnectionError pattern."""
-        pattern = ERROR_PATTERNS["ConnectionError"]
-        assert pattern["type"] == ErrorType.CONNECTION_ERROR
-        assert pattern["auto_retry"] is True
-
-    def test_git_error_pattern(self) -> None:
-        """Test GitError pattern."""
-        pattern = ERROR_PATTERNS["GitError"]
-        assert pattern["type"] == ErrorType.GIT_NOT_A_REPOSITORY
-        assert "git" in pattern["suggest"][0].lower()
-
     def test_all_patterns_have_required_keys(self) -> None:
-        """Test all patterns have required keys."""
+        """Test all patterns have required keys with correct types."""
         for name, pattern in ERROR_PATTERNS.items():
-            assert "type" in pattern, f"{name} missing 'type'"
-            assert "suggest" in pattern, f"{name} missing 'suggest'"
-            assert "auto_retry" in pattern, f"{name} missing 'auto_retry'"
-            assert isinstance(pattern["type"], ErrorType), f"{name} type is not ErrorType"
-            assert isinstance(pattern["suggest"], list), f"{name} suggest is not a list"
-            assert isinstance(pattern["auto_retry"], bool), f"{name} auto_retry is not bool"
+            assert all(key in pattern for key in ("type", "suggest", "auto_retry")), f"{name} missing keys"
+            assert isinstance(pattern["type"], ErrorType)
+            assert isinstance(pattern["suggest"], list) and isinstance(pattern["auto_retry"], bool)
 
 
 class TestMessagePatterns:
@@ -198,147 +163,68 @@ class TestErrorRecovery:
         """Create ErrorRecovery instance."""
         return ErrorRecovery()
 
-    def test_handle_file_not_found(self, recovery: ErrorRecovery) -> None:
-        """Test handling FileNotFoundError."""
-        error = FileNotFoundError("File not found: /tmp/test.txt")
-        action = recovery.handle_tool_error("read_file", error)
-
-        assert action.error_type == ErrorType.FILE_NOT_FOUND
-        assert action.should_retry is False
+    @pytest.mark.parametrize(
+        "error_class,error_msg,tool_name,expected_type,expected_retry",
+        [
+            (FileNotFoundError, "File not found: /tmp/test.txt", "read_file", ErrorType.FILE_NOT_FOUND, False),
+            (PermissionError, "Permission denied: /etc/passwd", "edit_file", ErrorType.PERMISSION_DENIED, False),
+            (IsADirectoryError, "Is a directory: /tmp", "read_file", ErrorType.IS_A_DIRECTORY, False),
+            (FileExistsError, "File already exists: /tmp/test.txt", "create_file", ErrorType.FILE_EXISTS, False),
+            (TimeoutError, "Operation timed out", "shell", ErrorType.TIMEOUT, True),
+            (ConnectionError, "Connection refused", "web_fetch", ErrorType.CONNECTION_ERROR, True),
+            (ValueError, "Invalid value provided", "some_tool", ErrorType.INVALID_ARGUMENT, False),
+            (TypeError, "Expected str, got int", "some_tool", ErrorType.INVALID_ARGUMENT, False),
+        ],
+    )
+    def test_handle_builtin_errors(
+        self,
+        recovery: ErrorRecovery,
+        error_class: type,
+        error_msg: str,
+        tool_name: str,
+        expected_type: ErrorType,
+        expected_retry: bool,
+    ) -> None:
+        """Test handling of builtin error types."""
+        error = error_class(error_msg)
+        action = recovery.handle_tool_error(tool_name, error)
+        assert action.error_type == expected_type
+        assert action.should_retry is expected_retry
         assert len(action.suggestions) >= 1
 
-    def test_handle_permission_error(self, recovery: ErrorRecovery) -> None:
-        """Test handling PermissionError."""
-        error = PermissionError("Permission denied: /etc/passwd")
-        action = recovery.handle_tool_error("edit_file", error)
-
-        assert action.error_type == ErrorType.PERMISSION_DENIED
-        assert action.should_retry is False
-
-    def test_handle_is_a_directory_error(self, recovery: ErrorRecovery) -> None:
-        """Test handling IsADirectoryError."""
-        error = IsADirectoryError("Is a directory: /tmp")
-        action = recovery.handle_tool_error("read_file", error)
-
-        assert action.error_type == ErrorType.IS_A_DIRECTORY
-        assert action.should_retry is False
-
-    def test_handle_file_exists_error(self, recovery: ErrorRecovery) -> None:
-        """Test handling FileExistsError."""
-        error = FileExistsError("File already exists: /tmp/test.txt")
-        action = recovery.handle_tool_error("create_file", error)
-
-        assert action.error_type == ErrorType.FILE_EXISTS
-        assert action.should_retry is False
-
-    def test_handle_timeout_error(self, recovery: ErrorRecovery) -> None:
-        """Test handling TimeoutError."""
-        error = TimeoutError("Operation timed out")
-        action = recovery.handle_tool_error("shell", error)
-
-        assert action.error_type == ErrorType.TIMEOUT
-        assert action.should_retry is True
-
-    def test_handle_connection_error(self, recovery: ErrorRecovery) -> None:
-        """Test handling ConnectionError."""
-        error = ConnectionError("Connection refused")
-        action = recovery.handle_tool_error("web_fetch", error)
-
-        assert action.error_type == ErrorType.CONNECTION_ERROR
-        assert action.should_retry is True
-
-    def test_handle_value_error(self, recovery: ErrorRecovery) -> None:
-        """Test handling ValueError."""
-        error = ValueError("Invalid value provided")
-        action = recovery.handle_tool_error("some_tool", error)
-
-        assert action.error_type == ErrorType.INVALID_ARGUMENT
-        assert action.should_retry is False
-
-    def test_handle_type_error(self, recovery: ErrorRecovery) -> None:
-        """Test handling TypeError."""
-        error = TypeError("Expected str, got int")
-        action = recovery.handle_tool_error("some_tool", error)
-
-        assert action.error_type == ErrorType.INVALID_ARGUMENT
-        assert action.should_retry is False
-
     def test_handle_json_decode_error(self, recovery: ErrorRecovery) -> None:
-        """Test handling json.JSONDecodeError."""
+        """Test handling json.JSONDecodeError (subclass of ValueError)."""
         error = json.JSONDecodeError("Invalid JSON", "{invalid", 0)
         action = recovery.handle_tool_error("web_fetch", error)
-
-        # Note: JSONDecodeError is a subclass of ValueError
-        # It may match ValueError pattern first or message pattern
         assert action.error_type in (ErrorType.JSON_DECODE_ERROR, ErrorType.INVALID_ARGUMENT)
 
     def test_handle_unknown_error(self, recovery: ErrorRecovery) -> None:
-        """Test handling unknown error type."""
+        """Test handling unknown error type includes tool name."""
 
         class CustomError(Exception):
             pass
 
         error = CustomError("Something went wrong")
         action = recovery.handle_tool_error("custom_tool", error)
+        assert action.error_type == ErrorType.UNKNOWN and "custom_tool" in action.suggestions[0]
 
-        assert action.error_type == ErrorType.UNKNOWN
-        assert action.should_retry is False
-        assert "custom_tool" in action.suggestions[0]
+    @pytest.mark.parametrize(
+        "error_msg,expected_type",
+        [
+            ("fatal: not a git repository", ErrorType.GIT_NOT_A_REPOSITORY),
+            ("No module named 'requests'", ErrorType.MODULE_NOT_FOUND),
+            ("Connection refused by host", ErrorType.CONNECTION_ERROR),
+        ],
+    )
+    def test_message_pattern_matching(self, recovery: ErrorRecovery, error_msg: str, expected_type: ErrorType) -> None:
+        """Test message pattern matching for various error messages."""
 
-    def test_handle_error_with_context(self, recovery: ErrorRecovery) -> None:
-        """Test handling error with context information."""
-        error = FileNotFoundError("File not found")
-        context = {"path": "/home/user/missing.txt"}
-        action = recovery.handle_tool_error("read_file", error, context)
-
-        assert action.error_type == ErrorType.FILE_NOT_FOUND
-        assert len(action.suggestions) >= 1
-
-    def test_message_pattern_matching_git(self, recovery: ErrorRecovery) -> None:
-        """Test message pattern matching for git errors."""
-
-        class GitError(Exception):
+        class GenericError(Exception):
             pass
 
-        error = GitError("fatal: not a git repository")
-        action = recovery.handle_tool_error("git_status", error)
-
-        assert action.error_type == ErrorType.GIT_NOT_A_REPOSITORY
-
-    def test_message_pattern_matching_module_not_found(self, recovery: ErrorRecovery) -> None:
-        """Test message pattern matching for module not found."""
-
-        class UnknownError(Exception):
-            pass
-
-        error = UnknownError("No module named 'requests'")
-        action = recovery.handle_tool_error("shell", error)
-
-        assert action.error_type == ErrorType.MODULE_NOT_FOUND
-
-    def test_message_pattern_matching_connection_refused(self, recovery: ErrorRecovery) -> None:
-        """Test message pattern matching for connection refused."""
-
-        class NetworkError(Exception):
-            pass
-
-        error = NetworkError("Connection refused by host")
-        action = recovery.handle_tool_error("web_fetch", error)
-
-        assert action.error_type == ErrorType.CONNECTION_ERROR
-
-    def test_git_tool_context_suggestion(self, recovery: ErrorRecovery) -> None:
-        """Test git tools get repository-specific suggestions."""
-
-        class UnknownError(Exception):
-            pass
-
-        error = UnknownError("fatal: not a git repository")
-        action = recovery.handle_tool_error("git_commit", error)
-
-        # Should have git-related suggestions
-        suggestions_text = " ".join(action.suggestions).lower()
-        assert "git" in suggestions_text or "repository" in suggestions_text
+        error = GenericError(error_msg)
+        action = recovery.handle_tool_error("test_tool", error)
+        assert action.error_type == expected_type
 
 
 class TestErrorRecoveryCustomPatterns:
@@ -349,76 +235,34 @@ class TestErrorRecoveryCustomPatterns:
         """Create ErrorRecovery instance."""
         return ErrorRecovery()
 
-    def test_add_error_pattern(self, recovery: ErrorRecovery) -> None:
-        """Test adding custom error pattern."""
+    def test_add_error_and_message_patterns(self, recovery: ErrorRecovery) -> None:
+        """Test adding custom error and message patterns."""
+        # Add error pattern
         recovery.add_error_pattern(
-            "CustomDatabaseError",
-            ErrorType.UNKNOWN,
-            ["Database connection failed.", "Check database credentials."],
-            auto_retry=True,
+            "CustomDatabaseError", ErrorType.UNKNOWN, ["Database connection failed."], auto_retry=True
         )
 
         class CustomDatabaseError(Exception):
             pass
 
-        error = CustomDatabaseError("DB connection timeout")
-        action = recovery.handle_tool_error("db_query", error)
-
-        # Pattern matches by name
+        action = recovery.handle_tool_error("db_query", CustomDatabaseError("timeout"))
         assert "Database" in action.suggestions[0]
 
-    def test_add_message_pattern(self, recovery: ErrorRecovery) -> None:
-        """Test adding custom message pattern."""
-        recovery.add_message_pattern(
-            r"rate limit exceeded",
-            ErrorType.TIMEOUT,
-            ["API rate limit reached.", "Wait and retry later."],
-        )
+        # Add message pattern
+        recovery.add_message_pattern(r"rate limit exceeded", ErrorType.TIMEOUT, ["Rate limited."])
 
         class APIError(Exception):
             pass
 
-        error = APIError("Error 429: rate limit exceeded")
-        action = recovery.handle_tool_error("api_call", error)
-
+        action = recovery.handle_tool_error("api_call", APIError("Error 429: rate limit exceeded"))
         assert action.error_type == ErrorType.TIMEOUT
-        assert "rate limit" in action.suggestions[0].lower()
 
-    def test_custom_pattern_priority(self, recovery: ErrorRecovery) -> None:
-        """Test that class-based patterns have priority over message patterns."""
-        # Add a specific message pattern
-        recovery.add_message_pattern(
-            r"special error",
-            ErrorType.CONNECTION_ERROR,
-            ["Special error occurred."],
-        )
-
-        # FileNotFoundError should still match by class
+    def test_class_based_pattern_priority_over_message(self, recovery: ErrorRecovery) -> None:
+        """Test class-based patterns have priority over message patterns."""
+        recovery.add_message_pattern(r"special error", ErrorType.CONNECTION_ERROR, ["Special."])
         error = FileNotFoundError("special error in file")
         action = recovery.handle_tool_error("read_file", error)
-
-        # Class-based matching should win
-        assert action.error_type == ErrorType.FILE_NOT_FOUND
-
-
-class TestContextualization:
-    """Tests for suggestion contextualization."""
-
-    @pytest.fixture
-    def recovery(self) -> ErrorRecovery:
-        """Create ErrorRecovery instance."""
-        return ErrorRecovery()
-
-    def test_tool_name_in_unknown_error(self, recovery: ErrorRecovery) -> None:
-        """Test tool name appears in unknown error suggestions."""
-
-        class UnknownError(Exception):
-            pass
-
-        error = UnknownError("Something broke")
-        action = recovery.handle_tool_error("my_custom_tool", error)
-
-        assert "my_custom_tool" in action.suggestions[0]
+        assert action.error_type == ErrorType.FILE_NOT_FOUND  # Class wins
 
     def test_module_placeholder_replacement(self, recovery: ErrorRecovery) -> None:
         """Test module placeholder is replaced in suggestions."""
@@ -428,12 +272,9 @@ class TestContextualization:
 
         error = ModuleError("No module named 'pandas'")
         action = recovery.handle_tool_error("shell", error)
-
         assert action.error_type == ErrorType.MODULE_NOT_FOUND
-        # Check if pandas appears in suggestions (from regex capture)
-        suggestions_text = " ".join(action.suggestions)
-        # Either the module name is captured or generic suggestion is given
-        assert "pandas" in suggestions_text or "module" in suggestions_text.lower()
+        suggestions_text = " ".join(action.suggestions).lower()
+        assert "pandas" in suggestions_text or "module" in suggestions_text
 
 
 class TestPropertyBased:

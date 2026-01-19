@@ -242,35 +242,33 @@ async def test_grep_ripgrep_invalid_json():
     assert len(results) == 1
 
 
-def test_is_ripgrep_available():
+@pytest.mark.parametrize("which_return,expected", [("/usr/bin/rg", True), (None, False)])
+def test_is_ripgrep_available(which_return: str | None, expected: bool) -> None:
     """Test ripgrep availability check."""
-    with patch("shutil.which", return_value="/usr/bin/rg"):
-        assert _is_ripgrep_available() is True
-
-    with patch("shutil.which", return_value=None):
-        assert _is_ripgrep_available() is False
+    with patch("shutil.which", return_value=which_return):
+        assert _is_ripgrep_available() is expected
 
 
-@pytest.mark.asyncio
-async def test_grep_search_uses_ripgrep_when_available(tmp_path):
-    """Test that grep_search uses ripgrep when available."""
-    (tmp_path / "test.txt").write_text("hello", encoding="utf-8")
+class TestGrepBackendSelection:
+    """Tests for grep backend selection (ripgrep vs Python)."""
 
-    with patch("pygent.tools.search._is_ripgrep_available", return_value=True):
-        with patch("pygent.tools.search._grep_with_ripgrep", return_value=[]) as mock_rg:
-            await grep_search("hello", str(tmp_path))
-            mock_rg.assert_called_once()
+    @pytest.mark.asyncio
+    async def test_uses_ripgrep_when_available(self, tmp_path) -> None:
+        """Test grep_search uses ripgrep when available."""
+        (tmp_path / "test.txt").write_text("hello", encoding="utf-8")
+        with patch("pygent.tools.search._is_ripgrep_available", return_value=True):
+            with patch("pygent.tools.search._grep_with_ripgrep", return_value=[]) as mock_rg:
+                await grep_search("hello", str(tmp_path))
+                mock_rg.assert_called_once()
 
-
-@pytest.mark.asyncio
-async def test_grep_search_uses_python_when_ripgrep_unavailable(tmp_path):
-    """Test that grep_search falls back to Python when ripgrep unavailable."""
-    (tmp_path / "test.txt").write_text("hello", encoding="utf-8")
-
-    with patch("pygent.tools.search._is_ripgrep_available", return_value=False):
-        with patch("pygent.tools.search._grep_with_python", return_value=[]) as mock_py:
-            await grep_search("hello", str(tmp_path))
-            mock_py.assert_called_once()
+    @pytest.mark.asyncio
+    async def test_uses_python_when_ripgrep_unavailable(self, tmp_path) -> None:
+        """Test grep_search falls back to Python when ripgrep unavailable."""
+        (tmp_path / "test.txt").write_text("hello", encoding="utf-8")
+        with patch("pygent.tools.search._is_ripgrep_available", return_value=False):
+            with patch("pygent.tools.search._grep_with_python", return_value=[]) as mock_py:
+                await grep_search("hello", str(tmp_path))
+                mock_py.assert_called_once()
 
 
 # Property-based tests
@@ -517,50 +515,53 @@ async def test_find_files_sorted_output(tmp_path):
 
 
 # =============================================================================
-# Tests for helper functions
+# Tests for helper functions (Consolidated)
 # =============================================================================
 
 
-def test_should_include_path_normal(tmp_path):
-    """Test _should_include_path with normal path."""
+class TestShouldIncludePath:
+    """Tests for _should_include_path helper."""
 
-    file_path = tmp_path / "subdir" / "file.py"
-    assert _should_include_path(file_path, tmp_path) is True
+    @pytest.mark.parametrize(
+        "subpath,expected",
+        [
+            ("subdir/file.py", True),
+            (".hidden/file.py", False),
+            ("node_modules/lib/index.js", False),
+            ("__pycache__/module.pyc", False),
+            ("venv/lib/site.py", False),
+        ],
+    )
+    def test_path_inclusion(self, tmp_path, subpath: str, expected: bool) -> None:
+        """Test _should_include_path with various paths."""
+        from pathlib import Path
 
-
-def test_should_include_path_hidden(tmp_path):
-    """Test _should_include_path with hidden directory."""
-
-    file_path = tmp_path / ".hidden" / "file.py"
-    assert _should_include_path(file_path, tmp_path) is False
-
-
-def test_should_include_path_node_modules(tmp_path):
-    """Test _should_include_path with node_modules."""
-
-    file_path = tmp_path / "node_modules" / "lib" / "index.js"
-    assert _should_include_path(file_path, tmp_path) is False
-
-
-def test_get_depth(tmp_path):
-    """Test _get_depth calculation."""
-
-    # Depth 1: file in root
-    assert _get_depth(tmp_path / "file.py", tmp_path) == 1
-
-    # Depth 2: file in subdir
-    assert _get_depth(tmp_path / "subdir" / "file.py", tmp_path) == 2
-
-    # Depth 3: file in nested subdirs
-    assert _get_depth(tmp_path / "a" / "b" / "file.py", tmp_path) == 3
+        file_path = tmp_path / Path(subpath)
+        assert _should_include_path(file_path, tmp_path) is expected
 
 
-def test_get_depth_unrelated_path():
-    """Test _get_depth with unrelated path (ValueError case)."""
-    from pathlib import Path
+class TestGetDepth:
+    """Tests for _get_depth helper."""
 
-    # When paths are unrelated, should return 0
-    assert _get_depth(Path("/some/other/path"), Path("/completely/different")) == 0
+    @pytest.mark.parametrize(
+        "subpath,expected_depth",
+        [
+            ("file.py", 1),
+            ("subdir/file.py", 2),
+            ("a/b/file.py", 3),
+        ],
+    )
+    def test_depth_calculation(self, tmp_path, subpath: str, expected_depth: int) -> None:
+        """Test _get_depth calculation."""
+        from pathlib import Path
+
+        assert _get_depth(tmp_path / Path(subpath), tmp_path) == expected_depth
+
+    def test_unrelated_path(self) -> None:
+        """Test _get_depth with unrelated paths returns 0."""
+        from pathlib import Path
+
+        assert _get_depth(Path("/some/other/path"), Path("/completely/different")) == 0
 
 
 # =============================================================================
@@ -1058,65 +1059,53 @@ async def test_find_definition_handles_unreadable_files(tmp_path):
 
 
 # =============================================================================
-# Tests for helper functions
+# Tests for find_definition helper functions (Consolidated)
 # =============================================================================
 
 
-def test_get_language_from_path_python():
-    """Test language detection for Python files."""
-    from pathlib import Path
+class TestGetLanguageFromPath:
+    """Tests for _get_language_from_path helper."""
 
-    assert _get_language_from_path(Path("test.py")) == "python"
-    assert _get_language_from_path(Path("test.pyi")) == "python"
-    assert _get_language_from_path(Path("test.pyw")) == "python"
+    @pytest.mark.parametrize(
+        "filename,expected_language",
+        [
+            ("test.py", "python"),
+            ("test.pyi", "python"),
+            ("test.pyw", "python"),
+            ("test.js", "javascript"),
+            ("test.mjs", "javascript"),
+            ("test.jsx", "javascript"),
+            ("test.ts", "typescript"),
+            ("test.tsx", "typescript"),
+            ("test.xyz", None),
+            ("test", None),
+        ],
+    )
+    def test_language_detection(self, filename: str, expected_language: str | None) -> None:
+        """Test language detection for various file extensions."""
+        from pathlib import Path
 
-
-def test_get_language_from_path_javascript():
-    """Test language detection for JavaScript files."""
-    from pathlib import Path
-
-    assert _get_language_from_path(Path("test.js")) == "javascript"
-    assert _get_language_from_path(Path("test.mjs")) == "javascript"
-    assert _get_language_from_path(Path("test.jsx")) == "javascript"
-
-
-def test_get_language_from_path_typescript():
-    """Test language detection for TypeScript files."""
-    from pathlib import Path
-
-    assert _get_language_from_path(Path("test.ts")) == "typescript"
-    assert _get_language_from_path(Path("test.tsx")) == "typescript"
-
-
-def test_get_language_from_path_unknown():
-    """Test language detection for unknown extensions."""
-    from pathlib import Path
-
-    assert _get_language_from_path(Path("test.xyz")) is None
-    assert _get_language_from_path(Path("test")) is None
+        assert _get_language_from_path(Path(filename)) == expected_language
 
 
-def test_compile_patterns_for_symbol():
-    """Test pattern compilation for symbols."""
-    patterns = _compile_patterns_for_symbol("my_func", "python")
-    assert len(patterns) > 0
-    # All should be compiled regex patterns
-    for pattern, _def_type in patterns:
-        assert hasattr(pattern, "match")
+class TestCompilePatternsForSymbol:
+    """Tests for _compile_patterns_for_symbol helper."""
 
+    def test_compiles_patterns(self) -> None:
+        """Test pattern compilation returns valid regex patterns."""
+        patterns = _compile_patterns_for_symbol("my_func", "python")
+        assert len(patterns) > 0
+        for pattern, _def_type in patterns:
+            assert hasattr(pattern, "match")
 
-def test_compile_patterns_unknown_language():
-    """Test pattern compilation for unknown language."""
-    patterns = _compile_patterns_for_symbol("symbol", "unknown_language")
-    assert patterns == []
+    def test_unknown_language_returns_empty(self) -> None:
+        """Test unknown language returns empty list."""
+        assert _compile_patterns_for_symbol("symbol", "unknown_language") == []
 
-
-def test_compile_patterns_escapes_special_chars():
-    """Test that special regex characters in symbols are escaped."""
-    # Symbol with regex special characters
-    patterns = _compile_patterns_for_symbol("my.func+test", "python")
-    # Should not raise and should escape the special chars
-    assert len(patterns) > 0
+    def test_escapes_special_chars(self) -> None:
+        """Test special regex characters in symbols are escaped."""
+        patterns = _compile_patterns_for_symbol("my.func+test", "python")
+        assert len(patterns) > 0  # Should not raise
 
 
 # =============================================================================

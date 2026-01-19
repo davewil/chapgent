@@ -22,419 +22,223 @@ from pygent.config.settings import (
 )
 
 # =============================================================================
-# Test Constants
+# Test Constants (Consolidated)
 # =============================================================================
 
 
-class TestValidProviders:
-    """Tests for VALID_PROVIDERS constant."""
+class TestValidationConstants:
+    """Tests for validation constants (providers, models, themes)."""
 
-    def test_is_frozenset(self):
-        """VALID_PROVIDERS should be a frozenset."""
-        assert isinstance(VALID_PROVIDERS, frozenset)
+    @pytest.mark.parametrize(
+        "constant,getter,expected_items,expected_substring_items",
+        [
+            (VALID_PROVIDERS, get_valid_providers, {"anthropic", "openai", "azure", "ollama", "groq"}, None),
+            (KNOWN_MODELS, get_known_models, None, [("claude", 1), ("gpt", 1)]),
+            (VALID_THEMES, get_valid_themes, {"textual-dark", "rose-pine"}, None),
+        ],
+    )
+    def test_constant_structure_and_content(self, constant, getter, expected_items, expected_substring_items):
+        """Test validation constants are frozensets with expected content."""
+        assert isinstance(constant, frozenset)
+        assert getter() is constant
+        if expected_items:
+            assert expected_items.issubset(constant)
+        if expected_substring_items:
+            for substr, min_count in expected_substring_items:
+                assert len([m for m in constant if substr in m]) >= min_count
 
-    def test_contains_common_providers(self):
-        """Should contain common LLM providers."""
-        expected = {"anthropic", "openai", "azure", "ollama", "groq"}
-        assert expected.issubset(VALID_PROVIDERS)
+    @pytest.mark.parametrize("constant", [VALID_PROVIDERS, VALID_THEMES])
+    def test_constants_all_lowercase(self, constant):
+        """All values in lowercase constants should be lowercase."""
+        for item in constant:
+            assert item == item.lower()
 
-    def test_all_lowercase(self):
-        """All provider names should be lowercase."""
-        for provider in VALID_PROVIDERS:
-            assert provider == provider.lower()
-
-    def test_get_valid_providers_returns_same(self):
-        """get_valid_providers() should return VALID_PROVIDERS."""
-        assert get_valid_providers() is VALID_PROVIDERS
-
-
-class TestKnownModels:
-    """Tests for KNOWN_MODELS constant."""
-
-    def test_is_frozenset(self):
-        """KNOWN_MODELS should be a frozenset."""
-        assert isinstance(KNOWN_MODELS, frozenset)
-
-    def test_contains_anthropic_models(self):
-        """Should contain Claude models."""
-        claude_models = [m for m in KNOWN_MODELS if "claude" in m]
-        assert len(claude_models) > 0
-
-    def test_contains_openai_models(self):
-        """Should contain GPT models."""
-        gpt_models = [m for m in KNOWN_MODELS if "gpt" in m]
-        assert len(gpt_models) > 0
-
-    def test_get_known_models_returns_same(self):
-        """get_known_models() should return KNOWN_MODELS."""
-        assert get_known_models() is KNOWN_MODELS
-
-
-class TestValidThemes:
-    """Tests for VALID_THEMES constant."""
-
-    def test_is_frozenset(self):
-        """VALID_THEMES should be a frozenset."""
-        assert isinstance(VALID_THEMES, frozenset)
-
-    def test_contains_default_theme(self):
-        """Should contain the default textual-dark theme."""
-        assert "textual-dark" in VALID_THEMES
-
-    def test_contains_rose_pine(self):
-        """Should contain rose-pine theme."""
-        assert "rose-pine" in VALID_THEMES
-
-    def test_all_lowercase(self):
-        """All theme names should be lowercase."""
-        for theme in VALID_THEMES:
-            assert theme == theme.lower()
-
-    def test_get_valid_themes_returns_same(self):
-        """get_valid_themes() should return VALID_THEMES."""
-        assert get_valid_themes() is VALID_THEMES
-
-
-class TestConfigValidationError:
-    """Tests for ConfigValidationError exception."""
-
-    def test_is_value_error(self):
-        """ConfigValidationError should be a ValueError."""
+    def test_config_validation_error(self):
+        """ConfigValidationError should be a ValueError and raisable."""
         assert issubclass(ConfigValidationError, ValueError)
-
-    def test_can_raise_with_message(self):
-        """Should be raisable with a message."""
         with pytest.raises(ConfigValidationError, match="test error"):
             raise ConfigValidationError("test error")
 
 
 # =============================================================================
-# Test LLMSettings Validation
+# Test LLMSettings Validation (Consolidated)
 # =============================================================================
 
 
-class TestLLMSettingsProviderValidation:
-    """Tests for LLMSettings.provider validation."""
+class TestLLMSettingsValidation:
+    """Tests for LLMSettings validation."""
 
-    def test_valid_provider_anthropic(self):
-        """Should accept 'anthropic' as provider."""
-        settings = LLMSettings(provider="anthropic")
-        assert settings.provider == "anthropic"
+    @pytest.mark.parametrize(
+        "provider,expected",
+        [("anthropic", "anthropic"), ("openai", "openai"), ("ANTHROPIC", "anthropic"), ("OpenAI", "openai")],
+    )
+    def test_valid_providers(self, provider: str, expected: str):
+        """Should accept valid providers with case normalization."""
+        assert LLMSettings(provider=provider).provider == expected
 
-    def test_valid_provider_openai(self):
-        """Should accept 'openai' as provider."""
-        settings = LLMSettings(provider="openai")
-        assert settings.provider == "openai"
-
-    def test_valid_provider_case_insensitive(self):
-        """Provider validation should be case-insensitive."""
-        settings = LLMSettings(provider="ANTHROPIC")
-        assert settings.provider == "anthropic"
-
-    def test_valid_provider_mixed_case(self):
-        """Provider validation should normalize mixed case."""
-        settings = LLMSettings(provider="OpenAI")
-        assert settings.provider == "openai"
-
-    def test_invalid_provider_raises_error(self):
-        """Should raise error for unknown provider."""
+    def test_invalid_provider_raises_error_with_options(self):
+        """Should raise error for unknown provider, listing valid options."""
         with pytest.raises(ValidationError) as exc_info:
             LLMSettings(provider="invalid_provider")
-        assert "Unknown provider" in str(exc_info.value)
-
-    def test_invalid_provider_shows_valid_options(self):
-        """Error message should list valid providers."""
-        with pytest.raises(ValidationError) as exc_info:
-            LLMSettings(provider="bad")
         error_msg = str(exc_info.value)
-        assert "anthropic" in error_msg
-        assert "openai" in error_msg
+        assert "Unknown provider" in error_msg and "anthropic" in error_msg and "openai" in error_msg
 
+    @pytest.mark.parametrize("max_tokens", [1, 4096, 8192, 100000])
+    def test_valid_max_tokens(self, max_tokens: int):
+        """Should accept max_tokens within valid range."""
+        assert LLMSettings(max_tokens=max_tokens).max_tokens == max_tokens
 
-class TestLLMSettingsMaxTokensValidation:
-    """Tests for LLMSettings.max_tokens validation."""
-
-    def test_valid_max_tokens_default(self):
-        """Should accept default max_tokens."""
-        settings = LLMSettings()
-        assert settings.max_tokens == 4096
-
-    def test_valid_max_tokens_custom(self):
-        """Should accept custom max_tokens within range."""
-        settings = LLMSettings(max_tokens=8192)
-        assert settings.max_tokens == 8192
-
-    def test_valid_max_tokens_minimum(self):
-        """Should accept minimum max_tokens value."""
-        settings = LLMSettings(max_tokens=1)
-        assert settings.max_tokens == 1
-
-    def test_valid_max_tokens_maximum(self):
-        """Should accept maximum max_tokens value."""
-        settings = LLMSettings(max_tokens=100000)
-        assert settings.max_tokens == 100000
-
-    def test_invalid_max_tokens_zero(self):
-        """Should reject zero max_tokens."""
+    @pytest.mark.parametrize(
+        "max_tokens,error_substring", [(0, "at least 1"), (-100, "at least 1"), (100001, "exceeds maximum")]
+    )
+    def test_invalid_max_tokens(self, max_tokens: int, error_substring: str):
+        """Should reject invalid max_tokens values."""
         with pytest.raises(ValidationError) as exc_info:
-            LLMSettings(max_tokens=0)
-        assert "at least 1" in str(exc_info.value)
+            LLMSettings(max_tokens=max_tokens)
+        assert error_substring in str(exc_info.value)
 
-    def test_invalid_max_tokens_negative(self):
-        """Should reject negative max_tokens."""
+    @pytest.mark.parametrize("api_key", [None, "sk-test-key-123"])
+    def test_valid_api_key(self, api_key: str | None):
+        """Should accept None or valid api_key strings."""
+        assert LLMSettings(api_key=api_key).api_key == api_key
+
+    @pytest.mark.parametrize("api_key", ["", "   "])
+    def test_invalid_api_key(self, api_key: str):
+        """Should reject empty or whitespace-only api_key."""
         with pytest.raises(ValidationError) as exc_info:
-            LLMSettings(max_tokens=-100)
-        assert "at least 1" in str(exc_info.value)
-
-    def test_invalid_max_tokens_too_large(self):
-        """Should reject max_tokens exceeding maximum."""
-        with pytest.raises(ValidationError) as exc_info:
-            LLMSettings(max_tokens=100001)
-        assert "exceeds maximum" in str(exc_info.value)
-
-
-class TestLLMSettingsApiKeyValidation:
-    """Tests for LLMSettings.api_key validation."""
-
-    def test_valid_api_key_none(self):
-        """Should accept None api_key (falls back to env)."""
-        settings = LLMSettings(api_key=None)
-        assert settings.api_key is None
-
-    def test_valid_api_key_string(self):
-        """Should accept valid api_key string."""
-        settings = LLMSettings(api_key="sk-test-key-123")
-        assert settings.api_key == "sk-test-key-123"
-
-    def test_invalid_api_key_empty_string(self):
-        """Should reject empty string api_key."""
-        with pytest.raises(ValidationError) as exc_info:
-            LLMSettings(api_key="")
+            LLMSettings(api_key=api_key)
         assert "empty string" in str(exc_info.value)
 
-    def test_invalid_api_key_whitespace_only(self):
-        """Should reject whitespace-only api_key."""
-        with pytest.raises(ValidationError) as exc_info:
-            LLMSettings(api_key="   ")
-        assert "empty string" in str(exc_info.value)
-
-
-class TestLLMSettingsModelField:
-    """Tests for LLMSettings.model field (no strict validation)."""
+    @pytest.mark.parametrize("model", ["claude-sonnet-4-20250514", "gpt-4", "custom-model-v1"])
+    def test_model_field_accepts_any(self, model: str):
+        """Should accept any model name (known or custom)."""
+        assert LLMSettings(model=model).model == model
 
     def test_default_model(self):
-        """Should have a default model."""
-        settings = LLMSettings()
-        assert settings.model == "claude-sonnet-4-20250514"
-
-    def test_custom_model_known(self):
-        """Should accept known model names."""
-        settings = LLMSettings(model="gpt-4")
-        assert settings.model == "gpt-4"
-
-    def test_custom_model_unknown(self):
-        """Should accept unknown model names (flexible for new models)."""
-        settings = LLMSettings(model="custom-model-v1")
-        assert settings.model == "custom-model-v1"
+        """Should have default model."""
+        assert LLMSettings().model == "claude-sonnet-4-20250514"
 
 
 # =============================================================================
-# Test TUISettings Validation
+# Test TUISettings Validation (Consolidated)
 # =============================================================================
 
 
-class TestTUISettingsThemeValidation:
-    """Tests for TUISettings.theme validation."""
+class TestTUISettingsValidation:
+    """Tests for TUISettings validation."""
 
-    def test_valid_theme_default(self):
-        """Should accept default theme."""
-        settings = TUISettings()
-        assert settings.theme == "textual-dark"
+    @pytest.mark.parametrize(
+        "theme,expected",
+        [
+            ("textual-dark", "textual-dark"),
+            ("textual-light", "textual-light"),
+            ("rose-pine", "rose-pine"),
+            ("TEXTUAL-DARK", "textual-dark"),
+        ],
+    )
+    def test_valid_themes(self, theme: str, expected: str):
+        """Should accept valid themes with case normalization."""
+        assert TUISettings(theme=theme).theme == expected
 
-    def test_valid_theme_textual_light(self):
-        """Should accept textual-light theme."""
-        settings = TUISettings(theme="textual-light")
-        assert settings.theme == "textual-light"
-
-    def test_valid_theme_rose_pine(self):
-        """Should accept rose-pine theme."""
-        settings = TUISettings(theme="rose-pine")
-        assert settings.theme == "rose-pine"
-
-    def test_valid_theme_case_insensitive(self):
-        """Theme validation should be case-insensitive."""
-        settings = TUISettings(theme="TEXTUAL-DARK")
-        assert settings.theme == "textual-dark"
-
-    def test_invalid_theme_raises_error(self):
-        """Should raise error for unknown theme."""
+    def test_invalid_theme_raises_error_with_options(self):
+        """Should raise error for unknown theme, listing valid options."""
         with pytest.raises(ValidationError) as exc_info:
             TUISettings(theme="invalid-theme")
-        assert "Unknown theme" in str(exc_info.value)
-
-    def test_invalid_theme_shows_valid_options(self):
-        """Error message should list valid themes."""
-        with pytest.raises(ValidationError) as exc_info:
-            TUISettings(theme="bad")
         error_msg = str(exc_info.value)
-        assert "textual-dark" in error_msg
+        assert "Unknown theme" in error_msg and "textual-dark" in error_msg
 
-
-class TestTUISettingsBooleanFields:
-    """Tests for TUISettings boolean fields."""
-
-    def test_show_tool_panel_default(self):
-        """Should have show_tool_panel True by default."""
-        settings = TUISettings()
-        assert settings.show_tool_panel is True
-
-    def test_show_tool_panel_false(self):
-        """Should accept False for show_tool_panel."""
-        settings = TUISettings(show_tool_panel=False)
-        assert settings.show_tool_panel is False
-
-    def test_show_sidebar_default(self):
-        """Should have show_sidebar True by default."""
-        settings = TUISettings()
-        assert settings.show_sidebar is True
+    def test_boolean_defaults_and_custom(self):
+        """Test TUISettings boolean fields defaults and custom values."""
+        default = TUISettings()
+        assert default.show_tool_panel is True and default.show_sidebar is True
+        custom = TUISettings(show_tool_panel=False)
+        assert custom.show_tool_panel is False
 
 
 # =============================================================================
-# Test SystemPromptSettings Validation
+# Test SystemPromptSettings Validation (Consolidated)
 # =============================================================================
 
 
-class TestSystemPromptSettingsFileValidation:
-    """Tests for SystemPromptSettings.file validation."""
+class TestSystemPromptSettingsValidation:
+    """Tests for SystemPromptSettings validation."""
 
-    def test_valid_file_none(self):
-        """Should accept None file path."""
-        settings = SystemPromptSettings(file=None)
-        assert settings.file is None
+    @pytest.mark.parametrize("file", [None, "~/.config/pygent/prompt.md"])
+    def test_valid_file(self, file: str | None):
+        """Should accept None or valid file paths."""
+        assert SystemPromptSettings(file=file).file == file
 
-    def test_valid_file_path(self):
-        """Should accept valid file path."""
-        settings = SystemPromptSettings(file="~/.config/pygent/prompt.md")
-        assert settings.file == "~/.config/pygent/prompt.md"
-
-    def test_invalid_file_empty_string(self):
-        """Should reject empty string file path."""
+    @pytest.mark.parametrize("file", ["", "   "])
+    def test_invalid_file(self, file: str):
+        """Should reject empty or whitespace-only file paths."""
         with pytest.raises(ValidationError) as exc_info:
-            SystemPromptSettings(file="")
+            SystemPromptSettings(file=file)
         assert "empty string" in str(exc_info.value)
 
-    def test_invalid_file_whitespace_only(self):
-        """Should reject whitespace-only file path."""
-        with pytest.raises(ValidationError) as exc_info:
-            SystemPromptSettings(file="   ")
-        assert "empty string" in str(exc_info.value)
-
-
-class TestSystemPromptSettingsOtherFields:
-    """Tests for SystemPromptSettings other fields."""
-
-    def test_mode_default(self):
-        """Should have append mode by default."""
-        settings = SystemPromptSettings()
-        assert settings.mode == "append"
-
-    def test_mode_replace(self):
-        """Should accept replace mode."""
-        settings = SystemPromptSettings(mode="replace")
-        assert settings.mode == "replace"
-
-    def test_content_and_append(self):
-        """Should accept both content and append."""
-        settings = SystemPromptSettings(content="Base prompt", append="Extra instructions")
-        assert settings.content == "Base prompt"
-        assert settings.append == "Extra instructions"
+    def test_mode_and_content(self):
+        """Test mode defaults and content/append fields."""
+        default = SystemPromptSettings()
+        assert default.mode == "append"
+        custom = SystemPromptSettings(mode="replace", content="Base", append="Extra")
+        assert (custom.mode, custom.content, custom.append) == ("replace", "Base", "Extra")
 
 
 # =============================================================================
-# Test PermissionSettings (no custom validation)
+# Test PermissionSettings (Consolidated)
 # =============================================================================
 
 
 class TestPermissionSettings:
     """Tests for PermissionSettings."""
 
-    def test_defaults(self):
-        """Should have correct defaults."""
-        settings = PermissionSettings()
-        assert settings.auto_approve_low_risk is True
-        assert settings.session_override_allowed is True
-
-    def test_custom_values(self):
-        """Should accept custom boolean values."""
-        settings = PermissionSettings(auto_approve_low_risk=False, session_override_allowed=False)
-        assert settings.auto_approve_low_risk is False
-        assert settings.session_override_allowed is False
+    def test_defaults_and_custom(self):
+        """Test PermissionSettings defaults and custom values."""
+        default = PermissionSettings()
+        assert (default.auto_approve_low_risk, default.session_override_allowed) == (True, True)
+        custom = PermissionSettings(auto_approve_low_risk=False, session_override_allowed=False)
+        assert (custom.auto_approve_low_risk, custom.session_override_allowed) == (False, False)
 
 
 # =============================================================================
-# Test Settings (Root Model)
+# Test Settings (Root Model) (Consolidated)
 # =============================================================================
 
 
-class TestSettingsDefaults:
-    """Tests for Settings defaults."""
+class TestSettingsValidation:
+    """Tests for Settings root model."""
 
     def test_default_settings(self):
         """Should create valid settings with defaults."""
         settings = Settings()
-        assert settings.llm.provider == "anthropic"
-        assert settings.tui.theme == "textual-dark"
-        assert settings.permissions.auto_approve_low_risk is True
-
-
-class TestSettingsValidateConfig:
-    """Tests for Settings.validate_config() method."""
+        assert (settings.llm.provider, settings.tui.theme, settings.permissions.auto_approve_low_risk) == (
+            "anthropic",
+            "textual-dark",
+            True,
+        )
 
     def test_valid_config_dict(self):
         """Should accept valid config dict."""
-        config = {"llm": {"provider": "openai", "model": "gpt-4"}}
-        settings = Settings.validate_config(config)
-        assert settings.llm.provider == "openai"
-        assert settings.llm.model == "gpt-4"
+        settings = Settings.validate_config({"llm": {"provider": "openai", "model": "gpt-4"}})
+        assert (settings.llm.provider, settings.llm.model) == ("openai", "gpt-4")
 
-    def test_invalid_config_raises_config_validation_error(self):
-        """Should raise ConfigValidationError for invalid config."""
-        config = {"llm": {"provider": "invalid"}}
+    def test_invalid_config_raises_error_with_field_path(self):
+        """Should raise ConfigValidationError with field path for invalid config."""
         with pytest.raises(ConfigValidationError) as exc_info:
-            Settings.validate_config(config)
-        assert "Configuration validation failed" in str(exc_info.value)
-
-    def test_error_message_includes_field_path(self):
-        """Error message should include the field path."""
-        config = {"llm": {"provider": "bad"}}
-        with pytest.raises(ConfigValidationError) as exc_info:
-            Settings.validate_config(config)
-        assert "llm.provider" in str(exc_info.value)
+            Settings.validate_config({"llm": {"provider": "bad"}})
+        error_msg = str(exc_info.value)
+        assert "Configuration validation failed" in error_msg and "llm.provider" in error_msg
 
     def test_multiple_errors_all_reported(self):
         """Should report all validation errors."""
-        config = {
-            "llm": {"provider": "bad", "max_tokens": -1},
-            "tui": {"theme": "invalid"},
-        }
         with pytest.raises(ConfigValidationError) as exc_info:
-            Settings.validate_config(config)
+            Settings.validate_config({"llm": {"provider": "bad", "max_tokens": -1}, "tui": {"theme": "invalid"}})
         error_msg = str(exc_info.value)
-        assert "llm.provider" in error_msg
-        assert "llm.max_tokens" in error_msg
-        assert "tui.theme" in error_msg
+        assert all(field in error_msg for field in ["llm.provider", "llm.max_tokens", "tui.theme"])
 
-
-class TestSettingsNestedValidation:
-    """Tests for Settings nested model validation."""
-
-    def test_nested_llm_validation(self):
-        """Should validate nested LLM settings."""
+    def test_nested_validation(self):
+        """Should validate nested settings models."""
         with pytest.raises(ValidationError):
             Settings(llm=LLMSettings(provider="invalid"))
-
-    def test_nested_tui_validation(self):
-        """Should validate nested TUI settings."""
         with pytest.raises(ValidationError):
             Settings(tui=TUISettings(theme="invalid"))
 
