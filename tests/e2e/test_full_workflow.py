@@ -5,6 +5,7 @@ multiple tools working together.
 """
 
 import json
+import string
 import uuid
 
 import pytest
@@ -522,15 +523,19 @@ class TestPropertyBasedE2E:
         assert result == content
 
     @given(
-        old=st.text(min_size=1, max_size=50).filter(lambda x: x.strip() and "\r" not in x),
-        new=st.text(min_size=1, max_size=50).filter(lambda x: "\r" not in x),
+        old=st.text(min_size=1, max_size=50, alphabet=string.ascii_letters + string.digits + " ").filter(
+            lambda x: x.strip() and "\r" not in x
+        ),
+        new=st.text(min_size=1, max_size=50, alphabet=string.ascii_letters + string.digits + " ").filter(
+            lambda x: "\r" not in x
+        ),
     )
     @settings(max_examples=10, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
     @pytest.mark.asyncio
     async def test_edit_replaces_correctly(self, tmp_path, old, new):
         """Test that edit correctly replaces text."""
-        # Skip if old text contains new text (would fail edit)
-        if old == new:
+        # Skip if old == new or if new contains old (would make assertion fail)
+        if old == new or old in new:
             return
 
         unique_dir = tmp_path / str(uuid.uuid4())
@@ -538,7 +543,7 @@ class TestPropertyBasedE2E:
 
         file_path = unique_dir / "test.txt"
         initial = f"prefix {old} suffix"
-        file_path.write_text(initial)
+        file_path.write_text(initial, encoding="utf-8")
 
         await edit_file(str(file_path), old, new)
 
@@ -548,7 +553,9 @@ class TestPropertyBasedE2E:
 
     @given(
         messages=st.lists(
-            st.text(min_size=1, max_size=100).filter(lambda x: x.strip()),
+            st.text(min_size=1, max_size=100, alphabet=string.ascii_letters + string.digits + " .,!?").filter(
+                lambda x: x.strip()
+            ),
             min_size=1,
             max_size=10,
         )

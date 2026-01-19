@@ -73,7 +73,7 @@ class GitIgnoreFilter:
         """Load patterns from .gitignore file if it exists."""
         gitignore_path = self.root / ".gitignore"
         if gitignore_path.is_file():
-            content = gitignore_path.read_text()
+            content = gitignore_path.read_text(encoding="utf-8")
             for line in content.splitlines():
                 line = line.strip()
                 # Skip comments and empty lines
@@ -237,7 +237,7 @@ async def _detect_python_project(path: Path) -> ProjectContext | None:
     # Parse pyproject.toml if it exists
     if pyproject_path.exists():
         config_files.append("pyproject.toml")
-        content = await asyncio.to_thread(pyproject_path.read_text)
+        content = await asyncio.to_thread(lambda: pyproject_path.read_text(encoding="utf-8"))
         try:
             data = tomllib.loads(content)
 
@@ -281,7 +281,7 @@ async def _detect_python_project(path: Path) -> ProjectContext | None:
     if requirements_txt.exists():
         config_files.append("requirements.txt")
         if not context.dependencies:
-            content = await asyncio.to_thread(requirements_txt.read_text)
+            content = await asyncio.to_thread(lambda: requirements_txt.read_text(encoding="utf-8"))
             deps = [
                 line.strip().split("==")[0].split(">=")[0].split("<=")[0]
                 for line in content.splitlines()
@@ -320,7 +320,7 @@ async def _detect_node_project(path: Path) -> ProjectContext | None:
 
     config_files = ["package.json"]
 
-    content = await asyncio.to_thread(package_json_path.read_text)
+    content = await asyncio.to_thread(lambda: package_json_path.read_text(encoding="utf-8"))
     try:
         data = json.loads(content)
 
@@ -388,7 +388,7 @@ async def _detect_go_project(path: Path) -> ProjectContext | None:
 
     config_files = ["go.mod"]
 
-    content = await asyncio.to_thread(go_mod_path.read_text)
+    content = await asyncio.to_thread(lambda: go_mod_path.read_text(encoding="utf-8"))
     lines = content.splitlines()
 
     # Parse module name from first line
@@ -461,7 +461,7 @@ async def _detect_rust_project(path: Path) -> ProjectContext | None:
 
     config_files = ["Cargo.toml"]
 
-    content = await asyncio.to_thread(cargo_toml_path.read_text)
+    content = await asyncio.to_thread(lambda: cargo_toml_path.read_text(encoding="utf-8"))
     try:
         data = tomllib.loads(content)
 

@@ -923,7 +923,7 @@ class TestEdgeCases:
         assert "Created project" in result
 
         readme = tmp_path / "unicode_test" / "README.md"
-        content = readme.read_text()
+        content = readme.read_text(encoding="utf-8")
         assert "🚀" in content
         assert "こんにちは" in content
 

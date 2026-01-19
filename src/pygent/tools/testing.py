@@ -78,7 +78,7 @@ async def detect_test_framework(project_path: Path) -> TestFramework:
     # Check for Python test frameworks
     pyproject = project_path / "pyproject.toml"
     if pyproject.exists():
-        content = pyproject.read_text()
+        content = pyproject.read_text(encoding="utf-8")
         if "[tool.pytest" in content or "pytest" in content.lower():
             return TestFramework.PYTEST
 
@@ -88,7 +88,7 @@ async def detect_test_framework(project_path: Path) -> TestFramework:
 
     setup_cfg = project_path / "setup.cfg"
     if setup_cfg.exists():
-        content = setup_cfg.read_text()
+        content = setup_cfg.read_text(encoding="utf-8")
         if "[tool:pytest]" in content:
             return TestFramework.PYTEST
 
@@ -96,7 +96,7 @@ async def detect_test_framework(project_path: Path) -> TestFramework:
     package_json = project_path / "package.json"
     if package_json.exists():
         try:
-            content = json.loads(package_json.read_text())
+            content = json.loads(package_json.read_text(encoding="utf-8"))
             deps = {
                 **content.get("dependencies", {}),
                 **content.get("devDependencies", {}),

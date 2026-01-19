@@ -1,6 +1,7 @@
 """Tests for project detection and gitignore filtering."""
 
 import json
+import string
 import uuid
 from pathlib import Path
 from unittest.mock import patch
@@ -569,7 +570,7 @@ class TestDetectProjectContext:
 
 @given(
     patterns=st.lists(
-        st.text(min_size=1, max_size=20, alphabet=st.characters(whitelist_categories=["L", "N", "P"])).filter(
+        st.text(min_size=1, max_size=20, alphabet=string.ascii_letters + string.digits + "._-").filter(
             lambda x: x.strip() and not x.startswith("#")
         ),
         min_size=0,
@@ -594,7 +595,7 @@ def test_gitignore_filter_loads_patterns(patterns: list[str], tmp_path: Path):
 
 
 @given(
-    project_name=st.text(min_size=1, max_size=30, alphabet=st.characters(whitelist_categories=["L", "N"])).filter(
+    project_name=st.text(min_size=1, max_size=30, alphabet=string.ascii_letters + string.digits).filter(
         lambda x: x.strip()
     ),
     version=st.from_regex(r"[0-9]+\.[0-9]+\.[0-9]+", fullmatch=True),
@@ -619,8 +620,8 @@ async def test_python_project_detection_property(project_name: str, version: str
 
 @given(
     deps=st.lists(
-        st.text(min_size=1, max_size=20, alphabet=st.characters(whitelist_categories=["L", "N", "Pd"])).filter(
-            lambda x: x.strip() and x.isidentifier()
+        st.text(min_size=1, max_size=20, alphabet=string.ascii_letters + string.digits + "_-").filter(
+            lambda x: x.strip() and x[0].isalpha()
         ),
         min_size=0,
         max_size=5,

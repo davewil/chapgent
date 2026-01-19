@@ -179,8 +179,8 @@ class TestMockProviderDelay:
         await provider.complete(messages, tools)
         elapsed = time.monotonic() - start
 
-        # Should have delayed at least 0.1 seconds
-        assert elapsed >= 0.1
+        # Should have delayed at least 0.1 seconds (with small tolerance for timer resolution)
+        assert elapsed >= 0.09  # Allow 10ms tolerance for Windows timer resolution
 
 
 class TestMockProviderEdgeCases:

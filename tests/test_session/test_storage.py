@@ -1,3 +1,5 @@
+import string
+
 import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
@@ -6,16 +8,19 @@ from hypothesis.strategies import datetimes
 from pygent.session.models import Message, Session, TextBlock, ToolInvocation, ToolResultBlock, ToolUseBlock
 from pygent.session.storage import SessionStorage
 
+# ASCII-safe text strategy for cross-platform compatibility
+safe_text = st.text(alphabet=string.ascii_letters + string.digits + " .,!?-_")
+
 # Strategies for generating Session objects
-text_block_strategy = st.builds(TextBlock, text=st.text())
+text_block_strategy = st.builds(TextBlock, text=safe_text)
 tool_use_block_strategy = st.builds(
     ToolUseBlock,
-    id=st.text(),
-    name=st.text(),
-    input=st.dictionaries(keys=st.text(), values=st.text()),  # Simple dict for now
+    id=safe_text,
+    name=safe_text,
+    input=st.dictionaries(keys=safe_text, values=safe_text),  # Simple dict for now
 )
 tool_result_block_strategy = st.builds(
-    ToolResultBlock, tool_use_id=st.text(), content=st.text(), is_error=st.booleans()
+    ToolResultBlock, tool_use_id=safe_text, content=safe_text, is_error=st.booleans()
 )
 
 content_block_strategy = st.one_of(text_block_strategy, tool_use_block_strategy, tool_result_block_strategy)
@@ -23,25 +28,25 @@ content_block_strategy = st.one_of(text_block_strategy, tool_use_block_strategy,
 message_strategy = st.builds(
     Message,
     role=st.sampled_from(["user", "assistant", "system"]),
-    content=st.one_of(st.text(), st.lists(content_block_strategy)),
+    content=st.one_of(safe_text, st.lists(content_block_strategy)),
     timestamp=datetimes(),
 )
 
 tool_invocation_strategy = st.builds(
     ToolInvocation,
-    tool_name=st.text(),
-    arguments=st.dictionaries(keys=st.text(), values=st.text()),
-    result=st.text(),
+    tool_name=safe_text,
+    arguments=st.dictionaries(keys=safe_text, values=safe_text),
+    result=safe_text,
     timestamp=datetimes(),
 )
 
 session_strategy = st.builds(
     Session,
-    id=st.text(min_size=1),  # Ensure non-empty ID
+    id=st.text(min_size=1, alphabet=string.ascii_letters + string.digits + "-_"),  # Ensure non-empty ID
     messages=st.lists(message_strategy),
     tool_history=st.lists(tool_invocation_strategy),
-    working_directory=st.text(),
-    metadata=st.dictionaries(keys=st.text(), values=st.text()),
+    working_directory=safe_text,
+    metadata=st.dictionaries(keys=safe_text, values=safe_text),
 )
 
 

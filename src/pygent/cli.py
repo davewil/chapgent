@@ -277,7 +277,7 @@ def _write_default_config(config_path: Path) -> None:
 # level = "INFO"  # DEBUG, INFO, WARNING, ERROR
 # file = "~/.local/share/pygent/logs/pygent.log"  # Custom log path
 """
-    config_path.write_text(default_content)
+    config_path.write_text(default_content, encoding="utf-8")
 
 
 @config.command()
@@ -425,7 +425,7 @@ def _write_toml(path: Path, data: dict[str, Any]) -> None:
     """Write data to a TOML file."""
     lines: list[str] = []
     _write_toml_section(lines, data, [])
-    path.write_text("\n".join(lines) + "\n")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _write_toml_section(lines: list[str], data: dict[str, Any], path_parts: list[str]) -> None:

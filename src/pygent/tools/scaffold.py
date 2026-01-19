@@ -1048,7 +1048,7 @@ def _detect_project_name(path: Path) -> str | None:
     """
     pyproject = path / "pyproject.toml"
     if pyproject.exists():
-        content = pyproject.read_text()
+        content = pyproject.read_text(encoding="utf-8")
         # Simple regex to find name in pyproject.toml
         match = re.search(r'name\s*=\s*"([^"]+)"', content)
         if match:
