@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from pygent.core.parallel import execute_tools_parallel
-from pygent.core.providers import LLMResponse, TokenUsage
+from pygent.core.providers import LLMError, LLMResponse, TokenUsage, classify_llm_error
 from pygent.core.providers import TextBlock as ProvTextBlock
 from pygent.core.providers import ToolUseBlock as ProvToolUseBlock
 from pygent.session.models import ContentBlock, Message, TextBlock, ToolResultBlock, ToolUseBlock
@@ -26,7 +26,7 @@ class LoopEvent:
     Attributes:
         type: Event type - "text", "tool_call", "tool_result", "param_error",
               "permission_denied", "finished", "cache_hit", "iteration_limit_reached",
-              "token_limit_reached".
+              "token_limit_reached", "llm_error".
         content: Event content (text or tool result).
         tool_name: Name of the tool involved (for tool events).
         tool_id: Unique ID of the tool call (for matching calls to results).
@@ -35,6 +35,9 @@ class LoopEvent:
         usage: Token usage for this iteration (for token tracking).
         iteration: Current iteration number.
         total_tokens: Cumulative total tokens used across all iterations.
+        error_type: Type of error (for llm_error events).
+        error_message: Error message (for llm_error events).
+        retryable: Whether the error can be retried (for llm_error events).
     """
 
     type: str
@@ -46,6 +49,9 @@ class LoopEvent:
     usage: TokenUsage | None = None
     iteration: int | None = None
     total_tokens: int | None = None
+    error_type: str | None = None
+    error_message: str | None = None
+    retryable: bool | None = None
 
 
 def _convert_to_llm_messages(messages: list[Message]) -> list[dict[str, Any]]:
@@ -141,10 +147,28 @@ async def conversation_loop(
             if tool_def:
                 tool_list.append(tool_def)
 
-        response: LLMResponse = await agent.provider.complete(
-            messages=llm_msgs,
-            tools=tool_list,
-        )
+        # Call LLM with error handling
+        try:
+            response: LLMResponse = await agent.provider.complete(
+                messages=llm_msgs,
+                tools=tool_list,
+            )
+        except Exception as e:
+            # Classify the error
+            llm_error: LLMError = classify_llm_error(e) if not isinstance(e, LLMError) else e
+
+            yield LoopEvent(
+                type="llm_error",
+                content=llm_error.message,
+                error_type=type(llm_error).__name__,
+                error_message=llm_error.message,
+                retryable=llm_error.retryable,
+                iteration=iteration,
+                total_tokens=total_tokens_used,
+                timestamp=datetime.now(),
+            )
+            # Exit loop on error - caller can decide to retry
+            break
 
         # Track token usage
         iteration_tokens = 0

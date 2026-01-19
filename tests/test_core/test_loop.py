@@ -763,3 +763,194 @@ class TestLoopTokenTracking:
         # Should complete without error
         assert events[-1].type == "finished"
         assert events[-1].total_tokens == 0  # No tokens counted
+
+
+class TestLoopErrorHandling:
+    """Test LLM error handling in conversation loop."""
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_error_yields_event(self, mock_provider, mock_registry, mock_permissions, session):
+        """Rate limit error should yield llm_error event with retryable=True."""
+        from pygent.core.providers import RateLimitError
+
+        mock_provider.complete.side_effect = RateLimitError("Rate limit exceeded")
+
+        agent = Agent(mock_provider, mock_registry, mock_permissions, session)
+        messages = [Message(role="user", content="Test")]
+
+        events = []
+        async for event in conversation_loop(agent, messages):
+            events.append(event)
+
+        # Should have llm_error event
+        error_events = [e for e in events if e.type == "llm_error"]
+        assert len(error_events) == 1
+
+        error_event = error_events[0]
+        assert error_event.error_type == "RateLimitError"
+        assert error_event.retryable is True
+        assert "Rate limit" in error_event.error_message
+
+        # Should still have finished event
+        assert events[-1].type == "finished"
+
+    @pytest.mark.asyncio
+    async def test_auth_error_yields_event(self, mock_provider, mock_registry, mock_permissions, session):
+        """Authentication error should yield llm_error event with retryable=False."""
+        from pygent.core.providers import AuthenticationError
+
+        mock_provider.complete.side_effect = AuthenticationError("Invalid API key")
+
+        agent = Agent(mock_provider, mock_registry, mock_permissions, session)
+        messages = [Message(role="user", content="Test")]
+
+        events = []
+        async for event in conversation_loop(agent, messages):
+            events.append(event)
+
+        error_events = [e for e in events if e.type == "llm_error"]
+        assert len(error_events) == 1
+
+        error_event = error_events[0]
+        assert error_event.error_type == "AuthenticationError"
+        assert error_event.retryable is False
+
+    @pytest.mark.asyncio
+    async def test_network_error_yields_event(self, mock_provider, mock_registry, mock_permissions, session):
+        """Network error should yield llm_error event with retryable=True."""
+        from pygent.core.providers import NetworkError
+
+        mock_provider.complete.side_effect = NetworkError("Connection timeout")
+
+        agent = Agent(mock_provider, mock_registry, mock_permissions, session)
+        messages = [Message(role="user", content="Test")]
+
+        events = []
+        async for event in conversation_loop(agent, messages):
+            events.append(event)
+
+        error_events = [e for e in events if e.type == "llm_error"]
+        assert len(error_events) == 1
+
+        error_event = error_events[0]
+        assert error_event.error_type == "NetworkError"
+        assert error_event.retryable is True
+
+    @pytest.mark.asyncio
+    async def test_invalid_request_error_yields_event(self, mock_provider, mock_registry, mock_permissions, session):
+        """Invalid request error should yield llm_error event with retryable=False."""
+        from pygent.core.providers import InvalidRequestError
+
+        mock_provider.complete.side_effect = InvalidRequestError("Invalid model")
+
+        agent = Agent(mock_provider, mock_registry, mock_permissions, session)
+        messages = [Message(role="user", content="Test")]
+
+        events = []
+        async for event in conversation_loop(agent, messages):
+            events.append(event)
+
+        error_events = [e for e in events if e.type == "llm_error"]
+        assert len(error_events) == 1
+
+        error_event = error_events[0]
+        assert error_event.error_type == "InvalidRequestError"
+        assert error_event.retryable is False
+
+    @pytest.mark.asyncio
+    async def test_service_unavailable_error_yields_event(
+        self, mock_provider, mock_registry, mock_permissions, session
+    ):
+        """Service unavailable error should yield llm_error event with retryable=True."""
+        from pygent.core.providers import ServiceUnavailableError
+
+        mock_provider.complete.side_effect = ServiceUnavailableError("Service down")
+
+        agent = Agent(mock_provider, mock_registry, mock_permissions, session)
+        messages = [Message(role="user", content="Test")]
+
+        events = []
+        async for event in conversation_loop(agent, messages):
+            events.append(event)
+
+        error_events = [e for e in events if e.type == "llm_error"]
+        assert len(error_events) == 1
+
+        error_event = error_events[0]
+        assert error_event.error_type == "ServiceUnavailableError"
+        assert error_event.retryable is True
+
+    @pytest.mark.asyncio
+    async def test_generic_exception_classified(self, mock_provider, mock_registry, mock_permissions, session):
+        """Generic exceptions should be classified and yield llm_error event."""
+        mock_provider.complete.side_effect = Exception("Unknown error")
+
+        agent = Agent(mock_provider, mock_registry, mock_permissions, session)
+        messages = [Message(role="user", content="Test")]
+
+        events = []
+        async for event in conversation_loop(agent, messages):
+            events.append(event)
+
+        error_events = [e for e in events if e.type == "llm_error"]
+        assert len(error_events) == 1
+
+        error_event = error_events[0]
+        assert error_event.error_type == "LLMError"
+        assert error_event.retryable is False  # Generic errors are not retryable
+
+    @pytest.mark.asyncio
+    async def test_error_event_includes_iteration(self, mock_provider, mock_registry, mock_permissions, session):
+        """Error event should include current iteration number."""
+        from pygent.core.providers import RateLimitError
+
+        mock_provider.complete.side_effect = RateLimitError("Rate limit")
+
+        agent = Agent(mock_provider, mock_registry, mock_permissions, session)
+        messages = [Message(role="user", content="Test")]
+
+        events = []
+        async for event in conversation_loop(agent, messages):
+            events.append(event)
+
+        error_event = next(e for e in events if e.type == "llm_error")
+        assert error_event.iteration == 1
+
+    @pytest.mark.asyncio
+    async def test_error_event_includes_total_tokens(self, mock_provider, mock_registry, mock_permissions, session):
+        """Error event should include cumulative token count."""
+        from pygent.core.providers import RateLimitError
+
+        # First call succeeds with tokens, second fails
+        mock_provider.complete.side_effect = [
+            LLMResponse(
+                content=[ProvToolUseBlock(id="call_1", name="tool", input={})],
+                stop_reason="tool_use",
+                usage=TokenUsage(prompt_tokens=100, completion_tokens=50, total_tokens=150),
+            ),
+            RateLimitError("Rate limit"),
+        ]
+
+        async def tool_fn(**kwargs):
+            return "result"
+
+        tool_def = ToolDefinition(
+            name="tool",
+            description="desc",
+            input_schema={},
+            risk=ToolRisk.LOW,
+            category=ToolCategory.SHELL,
+            function=tool_fn,
+        )
+        mock_registry.get.return_value = tool_def
+        mock_registry.list_definitions.return_value = [{"name": "tool"}]
+
+        agent = Agent(mock_provider, mock_registry, mock_permissions, session)
+        messages = [Message(role="user", content="Test")]
+
+        events = []
+        async for event in conversation_loop(agent, messages):
+            events.append(event)
+
+        error_event = next(e for e in events if e.type == "llm_error")
+        assert error_event.total_tokens == 150  # Tokens from first successful call

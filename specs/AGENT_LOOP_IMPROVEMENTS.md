@@ -101,41 +101,56 @@ Four independent improvements to harden the agent loop for production use. Each 
 
 ---
 
-## Phase 3: LLM Error Handling with Retry Events
+## Phase 3: LLM Error Handling with Retry Events ✅ COMPLETED
 
 **Priority:** Medium (production reliability)
 
 **Goal:** Handle transient LLM errors gracefully, letting the TUI/CLI decide retry behavior.
 
-### Changes
+**Status:** ✅ Completed 2026-01-19
 
-1. **`src/pygent/core/loop.py`**
-   - Add new `LoopEvent` types:
-     - `llm_error` (with `error_type`, `error_message`, `retryable` fields)
-   - Wrap `provider.complete()` in try/except
-   - Classify errors:
-     - Retryable: rate limits (429), network errors (timeouts, connection)
-     - Non-retryable: auth errors (401/403), invalid request (400)
-   - Yield `llm_error` event with error details
-   - Add mechanism for caller to signal "retry" or "abort"
+### Changes Made
 
-2. **`src/pygent/core/providers.py`**
-   - Create custom exception classes:
-     - `LLMError` (base)
-     - `RateLimitError`
-     - `NetworkError`
-     - `AuthError`
-   - Wrap litellm exceptions into these typed errors
+1. **`src/pygent/core/providers.py`** ✅
+   - Created custom exception class hierarchy:
+     - `LLMError` (base) - with message, retryable, status_code, original_error attributes
+     - `RateLimitError` - retryable=True, status_code=429, optional retry_after
+     - `NetworkError` - retryable=True, status_code=None
+     - `AuthenticationError` - retryable=False, status_code=401
+     - `InvalidRequestError` - retryable=False, status_code=400
+     - `ServiceUnavailableError` - retryable=True, status_code=503
+   - Implemented `classify_llm_error()` function:
+     - Checks litellm-specific exception types first
+     - Falls back to message pattern matching for error classification
+     - Patterns include: rate limit, network, auth, service unavailable
+     - Preserves original_error for debugging
 
-3. **`src/pygent/core/loop.py`**
-   - Add `RetryController` protocol/class that callers can implement
-   - Default behavior: yield error event and exit (no auto-retry)
+2. **`src/pygent/core/loop.py`** ✅
+   - Added new `LoopEvent` fields: `error_type`, `error_message`, `retryable`
+   - Wrapped `provider.complete()` in try/except block
+   - Yields `llm_error` event on exception with:
+     - error_type: Exception class name
+     - error_message: Human-readable message
+     - retryable: Boolean flag for retry decision
+     - iteration and total_tokens for context
+   - Default behavior: yield error event and exit loop (caller decides retry)
 
-### Tests
-- Test rate limit error yields correct event
-- Test network error yields correct event
-- Test auth error is marked non-retryable
-- Test retry mechanism works when controller signals retry
+### Tests ✅
+- `tests/test_core/test_providers_errors.py` (new file) - 30 tests:
+  - TestLLMExceptionClasses: 9 tests for exception hierarchy
+  - TestClassifyLLMError: 14 tests for error classification
+  - TestPropertyBasedErrors: 4 property-based tests
+  - TestEdgeCases: 4 edge case tests
+- `tests/test_core/test_loop.py` - 8 new tests added:
+  - TestLoopErrorHandling: rate limit, auth, network, invalid request, service unavailable errors
+  - Tests for error event fields and retryable flag
+
+### Learnings
+- litellm has its own exception types that should be checked first
+- Message pattern matching provides fallback classification for generic exceptions
+- Preserving original_error allows callers to inspect the underlying cause
+- Exit-on-error with retryable flag lets TUI/CLI implement retry UI
+- Classification should be case-insensitive for robustness
 
 ---
 
@@ -189,7 +204,7 @@ Four independent improvements to harden the agent loop for production use. Each 
 
 1. **Phase 1** (Tool Definition Metadata) - ✅ COMPLETED 2026-01-19
 2. **Phase 2** (Limits) - ✅ COMPLETED 2026-01-19
-3. **Phase 3** (Error Handling) - ⏳ Pending - Production reliability
+3. **Phase 3** (Error Handling) - ✅ COMPLETED 2026-01-19
 4. **Phase 4** (Cancellation) - ⏳ Pending - Nice to have
 
 ## Notes
@@ -210,3 +225,10 @@ Four independent improvements to harden the agent loop for production use. Each 
 - **New Features:** Token tracking, iteration limits, graceful exit events
 - **Tests Added:** 11 new tests for limits and tracking
 - **Pattern:** Limits checked at loop boundaries with descriptive events for UI handling
+
+### Phase 3 Results
+- **Files Modified:** 2 (loop.py, providers.py)
+- **Files Created:** 1 (tests/test_core/test_providers_errors.py)
+- **New Features:** LLM exception hierarchy, error classification, llm_error event type
+- **Tests Added:** 38 new tests (30 in test_providers_errors.py, 8 in test_loop.py)
+- **Pattern:** Classify errors into typed exceptions with retryable flag, yield event and exit for caller to decide retry

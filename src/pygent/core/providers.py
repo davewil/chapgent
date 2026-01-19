@@ -7,6 +7,163 @@ import litellm
 
 from pygent.tools.base import ToolDefinition
 
+# =============================================================================
+# LLM Exceptions
+# =============================================================================
+
+
+class LLMError(Exception):
+    """Base exception for LLM-related errors.
+
+    Attributes:
+        message: Human-readable error message.
+        retryable: Whether the error is transient and can be retried.
+        status_code: HTTP status code if applicable.
+        original_error: The underlying exception that caused this error.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        retryable: bool = False,
+        status_code: int | None = None,
+        original_error: Exception | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.message = message
+        self.retryable = retryable
+        self.status_code = status_code
+        self.original_error = original_error
+
+
+class RateLimitError(LLMError):
+    """Rate limit exceeded (HTTP 429).
+
+    This error is retryable - wait and try again.
+    """
+
+    def __init__(
+        self,
+        message: str = "Rate limit exceeded",
+        status_code: int = 429,
+        original_error: Exception | None = None,
+        retry_after: float | None = None,
+    ) -> None:
+        super().__init__(message, retryable=True, status_code=status_code, original_error=original_error)
+        self.retry_after = retry_after
+
+
+class NetworkError(LLMError):
+    """Network-related error (timeout, connection refused, etc.).
+
+    This error is retryable - network issues are often transient.
+    """
+
+    def __init__(
+        self,
+        message: str = "Network error",
+        original_error: Exception | None = None,
+    ) -> None:
+        super().__init__(message, retryable=True, status_code=None, original_error=original_error)
+
+
+class AuthenticationError(LLMError):
+    """Authentication failed (HTTP 401/403).
+
+    This error is NOT retryable - fix the API key.
+    """
+
+    def __init__(
+        self,
+        message: str = "Authentication failed",
+        status_code: int = 401,
+        original_error: Exception | None = None,
+    ) -> None:
+        super().__init__(message, retryable=False, status_code=status_code, original_error=original_error)
+
+
+class InvalidRequestError(LLMError):
+    """Invalid request (HTTP 400).
+
+    This error is NOT retryable - fix the request.
+    """
+
+    def __init__(
+        self,
+        message: str = "Invalid request",
+        status_code: int = 400,
+        original_error: Exception | None = None,
+    ) -> None:
+        super().__init__(message, retryable=False, status_code=status_code, original_error=original_error)
+
+
+class ServiceUnavailableError(LLMError):
+    """Service unavailable (HTTP 500/502/503/504).
+
+    This error is retryable - service issues are often transient.
+    """
+
+    def __init__(
+        self,
+        message: str = "Service unavailable",
+        status_code: int = 503,
+        original_error: Exception | None = None,
+    ) -> None:
+        super().__init__(message, retryable=True, status_code=status_code, original_error=original_error)
+
+
+def classify_llm_error(error: Exception) -> LLMError:
+    """Classify an exception into the appropriate LLMError type.
+
+    Args:
+        error: The original exception from litellm or underlying provider.
+
+    Returns:
+        An appropriate LLMError subclass with retryable flag set.
+    """
+    error_str = str(error).lower()
+
+    # Check for litellm specific exception types
+    if hasattr(litellm, "RateLimitError") and isinstance(error, litellm.RateLimitError):
+        return RateLimitError(str(error), original_error=error)
+
+    if hasattr(litellm, "AuthenticationError") and isinstance(error, litellm.AuthenticationError):
+        return AuthenticationError(str(error), original_error=error)
+
+    if hasattr(litellm, "BadRequestError") and isinstance(error, litellm.BadRequestError):
+        return InvalidRequestError(str(error), original_error=error)
+
+    if hasattr(litellm, "ServiceUnavailableError") and isinstance(error, litellm.ServiceUnavailableError):
+        return ServiceUnavailableError(str(error), original_error=error)
+
+    # Check for network-related errors by message patterns
+    network_patterns = ["timeout", "connection", "network", "socket", "dns", "refused"]
+    if any(pattern in error_str for pattern in network_patterns):
+        return NetworkError(str(error), original_error=error)
+
+    # Check for rate limit patterns
+    rate_limit_patterns = ["rate limit", "rate_limit", "too many requests", "429"]
+    if any(pattern in error_str for pattern in rate_limit_patterns):
+        return RateLimitError(str(error), original_error=error)
+
+    # Check for auth patterns
+    auth_patterns = ["authentication", "unauthorized", "invalid api key", "api key", "401", "403"]
+    if any(pattern in error_str for pattern in auth_patterns):
+        return AuthenticationError(str(error), original_error=error)
+
+    # Check for service unavailable patterns
+    service_patterns = ["service unavailable", "503", "502", "504", "500", "internal server error"]
+    if any(pattern in error_str for pattern in service_patterns):
+        return ServiceUnavailableError(str(error), original_error=error)
+
+    # Default: non-retryable generic error
+    return LLMError(str(error), retryable=False, original_error=error)
+
+
+# =============================================================================
+# Data Classes
+# =============================================================================
+
 
 @dataclass
 class TextBlock:

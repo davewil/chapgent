@@ -1015,3 +1015,39 @@
   - Learned: MockLLMProvider needs consistent usage returns for testing limit scenarios
   - Phase 2 of Agent Loop Improvements complete
   - Total: 1323 tests pass
+2026-01-19: Implemented Agent Loop Improvements - Phase 3: LLM Error Handling with Retry Events (AGENT_LOOP_IMPROVEMENTS.md):
+  - Created LLM exception class hierarchy in providers.py:
+    * LLMError (base) - with message, retryable, status_code, original_error attributes
+    * RateLimitError - retryable=True, status_code=429, optional retry_after
+    * NetworkError - retryable=True, status_code=None
+    * AuthenticationError - retryable=False, status_code=401
+    * InvalidRequestError - retryable=False, status_code=400
+    * ServiceUnavailableError - retryable=True, status_code=503
+  - Implemented classify_llm_error() function in providers.py:
+    * Checks litellm-specific exception types first (litellm.RateLimitError, etc.)
+    * Falls back to message pattern matching for classification
+    * Patterns: rate_limit, network, auth, service_unavailable
+    * Preserves original_error for debugging
+  - Updated LoopEvent dataclass with new fields:
+    * error_type: str | None - exception class name
+    * error_message: str | None - human-readable message
+    * retryable: bool | None - flag for retry decision
+  - Wrapped provider.complete() in try/except block in loop.py:
+    * Classifies exception using classify_llm_error()
+    * Yields llm_error event with error details
+    * Exits loop (caller decides whether to retry)
+  - Created tests/test_core/test_providers_errors.py with 30 tests:
+    * TestLLMExceptionClasses: 9 tests for exception hierarchy
+    * TestClassifyLLMError: 14 tests for error classification
+    * TestPropertyBasedErrors: 4 property-based tests with hypothesis
+    * TestEdgeCases: 4 edge case tests (empty message, None, case-insensitive)
+  - Added 8 tests to tests/test_core/test_loop.py (TestLoopErrorHandling):
+    * Tests for rate limit, auth, network, invalid request, service unavailable errors
+    * Verification of error event fields and retryable flag
+  - Learned: litellm has its own exception types that should be checked first via hasattr/isinstance
+  - Learned: Message pattern matching provides fallback classification for generic exceptions
+  - Learned: Preserving original_error allows callers to inspect the underlying cause
+  - Learned: Exit-on-error with retryable flag lets TUI/CLI implement their own retry UI
+  - Learned: Classification should be case-insensitive (str.lower()) for robustness
+  - Phase 3 of Agent Loop Improvements complete
+  - Total: 60 tests in test_providers_errors.py + test_loop.py pass
