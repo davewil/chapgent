@@ -488,7 +488,7 @@ class TestConfigSetLogging:
         def mock_get_config_paths() -> tuple[Path, Path]:
             return config_file, tmp_path / ".pygent" / "config.toml"
 
-        monkeypatch.setattr("pygent.cli._get_config_paths", mock_get_config_paths)
+        monkeypatch.setattr("pygent.config.writer.get_config_paths", mock_get_config_paths)
 
         runner = CliRunner()
         result = runner.invoke(cli, ["config", "set", "logging.level", "DEBUG"])
@@ -507,7 +507,7 @@ class TestConfigSetLogging:
         def mock_get_config_paths() -> tuple[Path, Path]:
             return config_file, tmp_path / ".pygent" / "config.toml"
 
-        monkeypatch.setattr("pygent.cli._get_config_paths", mock_get_config_paths)
+        monkeypatch.setattr("pygent.config.writer.get_config_paths", mock_get_config_paths)
 
         runner = CliRunner()
         result = runner.invoke(cli, ["config", "set", "logging.file", "/custom/path.log"])
@@ -522,7 +522,7 @@ class TestConfigSetLogging:
         def mock_get_config_paths() -> tuple[Path, Path]:
             return config_file, tmp_path / ".pygent" / "config.toml"
 
-        monkeypatch.setattr("pygent.cli._get_config_paths", mock_get_config_paths)
+        monkeypatch.setattr("pygent.config.writer.get_config_paths", mock_get_config_paths)
 
         runner = CliRunner()
         result = runner.invoke(cli, ["config", "set", "logging.level", "INVALID"])

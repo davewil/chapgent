@@ -26,6 +26,18 @@ from pygent.config.settings import (
     get_valid_providers,
     get_valid_themes,
 )
+from pygent.config.writer import (
+    VALID_CONFIG_KEYS,
+    ConfigWriteError,
+    convert_value,
+    format_toml_value,
+    get_config_paths,
+    get_default_config_content,
+    get_valid_config_keys,
+    save_config_value,
+    write_default_config,
+    write_toml,
+)
 
 __all__ = [
     # Settings
@@ -55,4 +67,15 @@ __all__ = [
     "get_template_variables",
     "load_prompt_file",
     "resolve_template_variables",
+    # Writer
+    "VALID_CONFIG_KEYS",
+    "ConfigWriteError",
+    "convert_value",
+    "format_toml_value",
+    "get_config_paths",
+    "get_default_config_content",
+    "get_valid_config_keys",
+    "save_config_value",
+    "write_default_config",
+    "write_toml",
 ]

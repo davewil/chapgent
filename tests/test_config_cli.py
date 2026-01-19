@@ -1,261 +1,21 @@
-"""Tests for the config CLI commands."""
+"""Tests for the config CLI commands.
+
+Note: Helper function tests (convert_value, format_toml_value, etc.)
+have been moved to test_config_writer.py. This file focuses on CLI behavior.
+"""
 
 import sys
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 from click.testing import CliRunner
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from pygent.cli import (
-    VALID_CONFIG_KEYS,
-    _convert_value,
-    _format_toml_value,
-    _get_config_paths,
-    _write_default_config,
-    _write_toml,
-    _write_toml_section,
-    cli,
+from pygent.cli import cli
+from pygent.config.writer import (
+    format_toml_value,
 )
-
-
-class TestGetConfigPaths:
-    """Tests for _get_config_paths helper."""
-
-    def test_returns_tuple_of_paths(self):
-        """Test that function returns tuple of two Path objects."""
-        user_config, project_config = _get_config_paths()
-
-        assert isinstance(user_config, Path)
-        assert isinstance(project_config, Path)
-
-    def test_user_config_path_structure(self):
-        """Test user config path is in ~/.config/pygent/."""
-        user_config, _ = _get_config_paths()
-
-        assert user_config.name == "config.toml"
-        assert user_config.parent.name == "pygent"
-        assert user_config.parent.parent.name == ".config"
-
-    def test_project_config_path_structure(self):
-        """Test project config path is in .pygent/."""
-        _, project_config = _get_config_paths()
-
-        assert project_config.name == "config.toml"
-        assert project_config.parent.name == ".pygent"
-
-
-class TestValidConfigKeys:
-    """Tests for VALID_CONFIG_KEYS constant."""
-
-    def test_contains_llm_keys(self):
-        """Test LLM config keys are present."""
-        assert "llm.provider" in VALID_CONFIG_KEYS
-        assert "llm.model" in VALID_CONFIG_KEYS
-        assert "llm.max_tokens" in VALID_CONFIG_KEYS
-        assert "llm.api_key" in VALID_CONFIG_KEYS
-
-    def test_contains_permission_keys(self):
-        """Test permission config keys are present."""
-        assert "permissions.auto_approve_low_risk" in VALID_CONFIG_KEYS
-        assert "permissions.session_override_allowed" in VALID_CONFIG_KEYS
-
-    def test_contains_tui_keys(self):
-        """Test TUI config keys are present."""
-        assert "tui.theme" in VALID_CONFIG_KEYS
-        assert "tui.show_tool_panel" in VALID_CONFIG_KEYS
-        assert "tui.show_sidebar" in VALID_CONFIG_KEYS
-
-    def test_contains_system_prompt_keys(self):
-        """Test system prompt config keys are present."""
-        assert "system_prompt.content" in VALID_CONFIG_KEYS
-        assert "system_prompt.file" in VALID_CONFIG_KEYS
-        assert "system_prompt.append" in VALID_CONFIG_KEYS
-        assert "system_prompt.mode" in VALID_CONFIG_KEYS
-
-    def test_is_frozen_set(self):
-        """Test that VALID_CONFIG_KEYS is a set (for fast lookup)."""
-        assert isinstance(VALID_CONFIG_KEYS, set)
-
-
-class TestConvertValue:
-    """Tests for _convert_value helper."""
-
-    def test_converts_max_tokens_to_int(self):
-        """Test integer conversion for max_tokens."""
-        result = _convert_value("llm.max_tokens", "8192")
-        assert result == 8192
-        assert isinstance(result, int)
-
-    def test_invalid_max_tokens_raises(self):
-        """Test invalid integer raises ClickException."""
-        import click
-
-        with pytest.raises(click.ClickException) as exc_info:
-            _convert_value("llm.max_tokens", "not_a_number")
-
-        assert "Invalid integer" in str(exc_info.value)
-
-    def test_converts_true_values_to_bool(self):
-        """Test various truthy string values convert to True."""
-        for value in ("true", "True", "TRUE", "1", "yes", "on"):
-            result = _convert_value("tui.show_tool_panel", value)
-            assert result is True
-
-    def test_converts_false_values_to_bool(self):
-        """Test various falsy string values convert to False."""
-        for value in ("false", "False", "FALSE", "0", "no", "off"):
-            result = _convert_value("tui.show_tool_panel", value)
-            assert result is False
-
-    def test_invalid_bool_raises(self):
-        """Test invalid boolean value raises ClickException."""
-        import click
-
-        with pytest.raises(click.ClickException) as exc_info:
-            _convert_value("tui.show_tool_panel", "maybe")
-
-        assert "Invalid boolean" in str(exc_info.value)
-
-    def test_validates_mode_values(self):
-        """Test system_prompt.mode validation."""
-        assert _convert_value("system_prompt.mode", "replace") == "replace"
-        assert _convert_value("system_prompt.mode", "append") == "append"
-
-    def test_invalid_mode_raises(self):
-        """Test invalid mode value raises ClickException."""
-        import click
-
-        with pytest.raises(click.ClickException) as exc_info:
-            _convert_value("system_prompt.mode", "invalid")
-
-        assert "Invalid mode" in str(exc_info.value)
-
-    def test_string_values_pass_through(self):
-        """Test non-special keys return string as-is."""
-        result = _convert_value("llm.model", "claude-3-5-haiku")
-        assert result == "claude-3-5-haiku"
-        assert isinstance(result, str)
-
-
-class TestFormatTomlValue:
-    """Tests for _format_toml_value helper."""
-
-    def test_formats_true(self):
-        """Test True formats as 'true'."""
-        assert _format_toml_value(True) == "true"
-
-    def test_formats_false(self):
-        """Test False formats as 'false'."""
-        assert _format_toml_value(False) == "false"
-
-    def test_formats_int(self):
-        """Test integer formats as string."""
-        assert _format_toml_value(4096) == "4096"
-
-    def test_formats_string_with_quotes(self):
-        """Test string wrapped in quotes."""
-        assert _format_toml_value("hello") == '"hello"'
-
-    def test_escapes_quotes_in_string(self):
-        """Test quotes are escaped."""
-        assert _format_toml_value('say "hello"') == '"say \\"hello\\""'
-
-    def test_escapes_backslashes(self):
-        """Test backslashes are escaped."""
-        assert _format_toml_value("path\\to\\file") == '"path\\\\to\\\\file"'
-
-
-class TestWriteTomlSection:
-    """Tests for _write_toml_section helper."""
-
-    def test_writes_simple_values(self):
-        """Test writing simple key-value pairs."""
-        lines: list[str] = []
-        data = {"model": "claude", "tokens": 4096}
-        _write_toml_section(lines, data, ["llm"])
-
-        output = "\n".join(lines)
-        assert "[llm]" in output
-        assert 'model = "claude"' in output
-        assert "tokens = 4096" in output
-
-    def test_writes_nested_sections(self):
-        """Test writing nested sections."""
-        lines: list[str] = []
-        data = {
-            "llm": {"model": "claude"},
-            "tui": {"theme": "dark"},
-        }
-        _write_toml_section(lines, data, [])
-
-        output = "\n".join(lines)
-        assert "[llm]" in output
-        assert "[tui]" in output
-        assert 'model = "claude"' in output
-        assert 'theme = "dark"' in output
-
-    def test_empty_data_produces_no_output(self):
-        """Test empty data produces no output."""
-        lines: list[str] = []
-        _write_toml_section(lines, {}, [])
-        assert lines == []
-
-
-class TestWriteToml:
-    """Tests for _write_toml helper."""
-
-    def test_writes_valid_toml(self, tmp_path):
-        """Test writes valid TOML that can be read back."""
-        path = tmp_path / "test.toml"
-        data = {
-            "llm": {"model": "claude", "max_tokens": 4096},
-            "tui": {"show_tool_panel": True},
-        }
-
-        _write_toml(path, data)
-
-        # Read it back with tomllib
-        if sys.version_info >= (3, 11):
-            import tomllib
-        else:
-            import tomli as tomllib  # type: ignore
-
-        with open(path, "rb") as f:
-            loaded = tomllib.load(f)
-
-        assert loaded["llm"]["model"] == "claude"
-        assert loaded["llm"]["max_tokens"] == 4096
-        assert loaded["tui"]["show_tool_panel"] is True
-
-
-class TestWriteDefaultConfig:
-    """Tests for _write_default_config helper."""
-
-    def test_creates_config_file(self, tmp_path):
-        """Test creates config file with content."""
-        path = tmp_path / "config.toml"
-        _write_default_config(path)
-
-        assert path.exists()
-        content = path.read_text()
-        assert "[llm]" in content
-        assert "[permissions]" in content
-        assert "[tui]" in content
-        assert "[system_prompt]" in content
-
-    def test_contains_commented_defaults(self, tmp_path):
-        """Test contains commented default values."""
-        path = tmp_path / "config.toml"
-        _write_default_config(path)
-
-        content = path.read_text()
-        # All values should be commented out
-        assert '# provider = "anthropic"' in content
-        assert "# model = " in content
-        assert "# max_tokens = " in content
 
 
 class TestConfigPathCommand:
@@ -581,7 +341,7 @@ class TestPropertyBased:
     @settings(max_examples=50)
     def test_format_toml_value_roundtrip(self, value):
         """Test formatting then parsing gives back original value."""
-        formatted = _format_toml_value(value)
+        formatted = format_toml_value(value)
 
         # Should be a valid TOML string
         assert formatted.startswith('"')
@@ -596,42 +356,14 @@ class TestPropertyBased:
     @given(st.integers(min_value=0, max_value=100000))
     def test_format_toml_value_integer(self, value):
         """Test integer formatting."""
-        formatted = _format_toml_value(value)
+        formatted = format_toml_value(value)
         assert formatted == str(value)
 
     @given(st.booleans())
     def test_format_toml_value_boolean(self, value):
         """Test boolean formatting."""
-        formatted = _format_toml_value(value)
+        formatted = format_toml_value(value)
         assert formatted == ("true" if value else "false")
-
-    @given(
-        st.dictionaries(
-            keys=st.text(alphabet="abcdefghijklmnopqrstuvwxyz_", min_size=1, max_size=10),
-            values=st.one_of(
-                st.text(min_size=0, max_size=20),
-                st.integers(min_value=0, max_value=10000),
-                st.booleans(),
-            ),
-            min_size=0,
-            max_size=5,
-        )
-    )
-    @settings(max_examples=30)
-    def test_write_toml_section_produces_valid_output(self, data):
-        """Test _write_toml_section produces valid TOML structure."""
-        lines: list[str] = []
-        _write_toml_section(lines, data, ["test"])
-
-        output = "\n".join(lines)
-
-        # If data is not empty, should have section header
-        if data:
-            assert "[test]" in output
-
-        # Each key should appear
-        for key in data:
-            assert key in output
 
 
 class TestEdgeCases:

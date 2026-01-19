@@ -9,6 +9,7 @@ from pygent.config.settings import Settings
 from pygent.core.agent import Agent
 from pygent.session.models import Session
 from pygent.session.storage import SessionStorage
+from pygent.tui.commands import format_command_list, get_command_help, parse_slash_command
 from pygent.tui.widgets import (
     CommandPalette,
     ConversationPanel,
@@ -76,6 +77,11 @@ class PygentApp(App[None]):
 
         # Clear input
         message.input.value = ""
+
+        # Check for slash commands
+        if user_input.strip().startswith("/"):
+            await self._handle_slash_command(user_input.strip())
+            return
 
         # Update UI
         self.query_one(ConversationPanel).append_user_message(user_input)
@@ -269,6 +275,113 @@ class PygentApp(App[None]):
                 )
         except Exception as e:
             self.notify(f"Error loading sessions: {e}", severity="warning")
+
+    async def _handle_slash_command(self, user_input: str) -> None:
+        """Handle a slash command.
+
+        Args:
+            user_input: The full user input starting with '/'.
+        """
+        command, args = parse_slash_command(user_input)
+
+        if command is None:
+            # Unknown command
+            self.notify(f"Unknown command: {user_input.split()[0]}", severity="warning")
+            self.notify("Type /help for available commands.", severity="information")
+            return
+
+        # Handle special commands that need arguments
+        if command.name == "help":
+            await self._handle_help_command(args)
+            return
+
+        if command.name == "config":
+            await self._handle_config_command(args)
+            return
+
+        # Map action names to actual action methods
+        action_name = f"action_{command.action}"
+        action_method = getattr(self, action_name, None)
+
+        if action_method is not None:
+            # Call the action method
+            if callable(action_method):
+                result = action_method()
+                # If it's a coroutine, await it
+                if hasattr(result, "__await__"):
+                    await result
+        else:
+            self.notify(f"Action not implemented: {command.action}", severity="warning")
+
+    async def _handle_help_command(self, args: list[str]) -> None:
+        """Handle the /help command.
+
+        Args:
+            args: Command arguments (optional topic name).
+        """
+        if not args:
+            # Show list of all commands
+            help_text = format_command_list()
+            self.query_one(ConversationPanel).append_assistant_message(help_text)
+            return
+
+        # Show help for a specific command
+        topic = args[0]
+        help_text = get_command_help(topic)
+
+        if help_text is None:
+            self.notify(f"Unknown help topic: {topic}", severity="warning")
+            self.notify("Type /help for available commands.", severity="information")
+            return
+
+        self.query_one(ConversationPanel).append_assistant_message(help_text)
+
+    async def _handle_config_command(self, args: list[str]) -> None:
+        """Handle the /config command.
+
+        Args:
+            args: Command arguments (e.g., ["show"] or ["set", "key", "value"]).
+        """
+        if not args or args[0] == "show":
+            # Show current configuration
+            if self.settings:
+                config_text = (
+                    "Current Configuration:\n"
+                    f"  LLM Model: {self.settings.llm.model}\n"
+                    f"  LLM Provider: {self.settings.llm.provider}\n"
+                    f"  Max Tokens: {self.settings.llm.max_tokens}\n"
+                    f"  Theme: {self.settings.tui.theme}\n"
+                    f"  Show Tool Panel: {self.settings.tui.show_tool_panel}\n"
+                    f"  Show Sidebar: {self.settings.tui.show_sidebar}"
+                )
+                self.query_one(ConversationPanel).append_assistant_message(config_text)
+            else:
+                self.notify("No configuration available.", severity="warning")
+            return
+
+        if args[0] == "set":
+            if len(args) < 3:
+                self.notify("Usage: /config set <key> <value>", severity="warning")
+                return
+
+            key = args[1]
+            value = " ".join(args[2:])  # Join remaining args as value
+
+            try:
+                from pygent.config.writer import save_config_value
+
+                config_path, typed_value = save_config_value(key, value)
+                self.notify(f"Set {key} = {typed_value}", severity="information")
+
+                # If theme was changed, apply it immediately
+                if key == "tui.theme" and isinstance(typed_value, str):
+                    self.theme = typed_value
+            except Exception as e:
+                self.notify(f"Error setting config: {e}", severity="error")
+            return
+
+        self.notify(f"Unknown config subcommand: {args[0]}", severity="warning")
+        self.notify("Use /config show or /config set <key> <value>", severity="information")
 
 
 if __name__ == "__main__":

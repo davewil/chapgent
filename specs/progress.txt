@@ -1116,3 +1116,77 @@
   - Total test_loop.py: 36 tests (up from 30)
   - Overall coverage: 96%
   - Total: 1371 tests pass (some tests consolidated via parametrization in previous commit)
+2026-01-19: Implemented Phase 5 TUI Enhancements - Infrastructure (specs/phase-5-tui-enhancements.md):
+  - Created src/pygent/config/writer.py module:
+    * Extracted config writing functions from cli.py
+    * VALID_CONFIG_KEYS frozenset with 16 configurable keys
+    * ConfigWriteError exception with path tracking
+    * get_config_paths() - returns (user_config, project_config) paths
+    * convert_value() - type conversion for config values (int, bool, string)
+    * format_toml_value() - TOML formatting for values
+    * write_toml() / _write_toml_section() - TOML file writing
+    * get_default_config_content() - returns default config template
+    * write_default_config() - writes config file with defaults
+    * save_config_value() - main entry point for setting config values
+    * get_valid_config_keys() - returns the valid keys frozenset
+  - Created src/pygent/tui/commands.py module:
+    * SlashCommand dataclass with name, aliases, description, action, args_pattern
+    * matches() method for command matching (case-insensitive)
+    * SLASH_COMMANDS list with 14 commands:
+      - Help: /help, /tools
+      - Settings: /theme, /model, /tui, /prompt, /config
+      - Sessions: /new, /save
+      - UI: /sidebar, /toolpanel
+      - Utility: /clear, /quit
+    * get_slash_command() - lookup command by name/alias
+    * parse_slash_command() - parse user input into (command, args)
+    * list_slash_commands() - list all commands with descriptions
+    * get_command_help() - get help text for specific command
+    * format_command_list() - format all commands for display
+  - Updated src/pygent/tui/app.py:
+    * Added slash command interception in on_input_submitted()
+    * Added _handle_slash_command() method to dispatch commands
+    * Added _handle_help_command() for /help [topic]
+    * Added _handle_config_command() for /config show|set
+    * Commands map to action methods via action_name pattern
+    * Unknown commands show notification with help suggestion
+    * /config set applies changes immediately (theme changes live)
+  - Updated module exports:
+    * config/__init__.py: Added writer module exports
+    * tui/__init__.py: Added commands module exports
+  - Refactored src/pygent/cli.py:
+    * Imports from config/writer.py instead of local definitions
+    * Removed duplicate code for config writing functions
+    * set_config command now uses save_config_value()
+  - Created tests/test_config_writer.py with 63 tests:
+    * Tests for VALID_CONFIG_KEYS (6 tests)
+    * Tests for get_config_paths (3 tests)
+    * Tests for convert_value (10 tests)
+    * Tests for format_toml_value (5 tests)
+    * Tests for write_default_config (3 tests)
+    * Tests for write_toml (2 tests)
+    * Tests for save_config_value (4 tests)
+    * Property-based tests with hypothesis (4 tests)
+    * Edge cases and integration tests (7 tests)
+  - Created tests/test_tui/test_commands.py with 48 tests:
+    * Tests for SlashCommand dataclass (6 tests)
+    * Tests for SLASH_COMMANDS constant (6 tests)
+    * Tests for get_slash_command (4 tests)
+    * Tests for parse_slash_command (9 tests)
+    * Tests for list_slash_commands (3 tests)
+    * Tests for get_command_help (5 tests)
+    * Tests for format_command_list (4 tests)
+    * Property-based tests with hypothesis (3 tests)
+    * Edge cases and integration tests (8 tests)
+  - Updated tests/test_config_cli.py:
+    * Changed imports to use config/writer.py module
+    * Removed duplicate tests now covered by test_config_writer.py
+  - Updated tests/test_logging.py:
+    * Changed monkeypatch path from pygent.cli._get_config_paths to pygent.config.writer.get_config_paths
+  - Learned: Extracting modules from cli.py requires updating monkeypatch paths in tests
+  - Learned: SlashCommand aliases provide user-friendly shortcuts (e.g., /h for /help)
+  - Learned: Command action names should match action_* method names for consistent dispatch
+  - Learned: Config changes can be applied immediately in TUI (e.g., self.theme = typed_value)
+  - Learned: frozenset is immutable and faster for membership testing than set
+  - Phase 1 of Phase 5 TUI Enhancements complete (Infrastructure)
+  - Total: 1439 tests pass

@@ -7,6 +7,12 @@ import click
 
 from pygent.config.loader import load_config
 from pygent.config.prompt import PromptLoadError, build_full_system_prompt
+from pygent.config.writer import (
+    ConfigWriteError,
+    get_config_paths,
+    write_default_config,
+    write_toml,
+)
 from pygent.context.detection import detect_project_context
 from pygent.core.agent import Agent
 from pygent.core.mock_provider import MockLLMProvider
@@ -186,17 +192,10 @@ def show() -> None:
     click.echo(f"  show_tool_panel: {settings.tui.show_tool_panel}")
 
 
-def _get_config_paths() -> tuple[Path, Path]:
-    """Get the user and project config file paths."""
-    user_config = Path.home() / ".config" / "pygent" / "config.toml"
-    project_config = Path.cwd() / ".pygent" / "config.toml"
-    return user_config, project_config
-
-
 @config.command()
 def path() -> None:
     """Show config file paths."""
-    user_config, project_config = _get_config_paths()
+    user_config, project_config = get_config_paths()
 
     click.echo("Configuration File Paths:")
     click.echo("=" * 60)
@@ -226,7 +225,7 @@ def edit(project: bool) -> None:
     import subprocess
 
     editor = os.environ.get("EDITOR", os.environ.get("VISUAL", "vi"))
-    user_config, project_config = _get_config_paths()
+    user_config, project_config = get_config_paths()
 
     config_path = project_config if project else user_config
 
@@ -235,7 +234,7 @@ def edit(project: bool) -> None:
 
     # Create file with defaults if it doesn't exist
     if not config_path.exists():
-        _write_default_config(config_path)
+        write_default_config(config_path)
         click.echo(f"Created {config_path} with default settings.")
 
     try:
@@ -246,127 +245,22 @@ def edit(project: bool) -> None:
         raise click.ClickException(f"Editor exited with error: {e.returncode}") from None
 
 
-def _write_default_config(config_path: Path) -> None:
-    """Write default configuration to a file."""
-    default_content = """\
-# Pygent Configuration
-# See: https://github.com/davewil/pygent for documentation
-
-[llm]
-# provider = "anthropic"
-# model = "claude-sonnet-4-20250514"
-# max_tokens = 4096
-# api_key = ""  # Prefer ANTHROPIC_API_KEY env var
-
-[permissions]
-# auto_approve_low_risk = true
-# session_override_allowed = true
-
-[tui]
-# theme = "textual-dark"
-# show_tool_panel = true
-# show_sidebar = true
-
-[system_prompt]
-# content = "Custom system prompt content"
-# file = "~/.config/pygent/prompt.md"
-# append = "Additional context appended to base prompt"
-# mode = "append"  # or "replace"
-
-[logging]
-# level = "INFO"  # DEBUG, INFO, WARNING, ERROR
-# file = "~/.local/share/pygent/logs/pygent.log"  # Custom log path
-"""
-    config_path.write_text(default_content, encoding="utf-8")
-
-
 @config.command()
 @click.option("--project", "-p", is_flag=True, help="Initialize project config instead of user config")
 @click.option("--force", "-f", is_flag=True, help="Overwrite existing config file")
 def init(project: bool, force: bool) -> None:
     """Create default config file."""
-    user_config, project_config = _get_config_paths()
+    user_config, project_config = get_config_paths()
     config_path = project_config if project else user_config
 
     if config_path.exists() and not force:
         raise click.ClickException(f"Config file already exists at {config_path}. Use --force to overwrite.") from None
 
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    _write_default_config(config_path)
+    write_default_config(config_path)
 
     location = "project" if project else "user"
     click.echo(f"Created {location} config at {config_path}")
-
-
-# Valid config keys that can be set
-VALID_CONFIG_KEYS = {
-    "llm.provider",
-    "llm.model",
-    "llm.max_tokens",
-    "llm.api_key",
-    "permissions.auto_approve_low_risk",
-    "permissions.session_override_allowed",
-    "tui.theme",
-    "tui.show_tool_panel",
-    "tui.show_sidebar",
-    "system_prompt.content",
-    "system_prompt.file",
-    "system_prompt.append",
-    "system_prompt.mode",
-    "logging.level",
-    "logging.file",
-}
-
-
-def _convert_value(key: str, value: str) -> str | int | bool:
-    """Convert a string value to the appropriate type for the given key."""
-    # Integer fields
-    if key == "llm.max_tokens":
-        try:
-            return int(value)
-        except ValueError:
-            raise click.ClickException(f"Invalid integer value for {key}: {value}") from None
-
-    # Boolean fields
-    bool_keys = {
-        "permissions.auto_approve_low_risk",
-        "permissions.session_override_allowed",
-        "tui.show_tool_panel",
-        "tui.show_sidebar",
-    }
-    if key in bool_keys:
-        if value.lower() in ("true", "1", "yes", "on"):
-            return True
-        if value.lower() in ("false", "0", "no", "off"):
-            return False
-        raise click.ClickException(f"Invalid boolean value for {key}: {value}. Use true/false.") from None
-
-    # Validate mode values
-    if key == "system_prompt.mode":
-        if value not in ("replace", "append"):
-            raise click.ClickException(f"Invalid mode value: {value}. Use 'replace' or 'append'.") from None
-
-    # Validate logging level
-    if key == "logging.level":
-        valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR"}
-        if value.upper() not in valid_levels:
-            raise click.ClickException(
-                f"Invalid log level: {value}. Valid levels are: DEBUG, INFO, WARNING, ERROR"
-            ) from None
-        return value.upper()  # Normalize to uppercase
-
-    return value
-
-
-def _format_toml_value(value: str | int | bool) -> str:
-    """Format a value for TOML output."""
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, int):
-        return str(value)
-    # String - escape quotes and wrap in quotes
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{escaped}"'
 
 
 @config.command("set")
@@ -381,74 +275,15 @@ def set_config(key: str, value: str, project: bool) -> None:
 
     Example: pygent config set llm.model claude-3-5-haiku-20241022
     """
-    import sys
+    from pygent.config.writer import save_config_value
 
-    if sys.version_info >= (3, 11):
-        import tomllib
-    else:
-        import tomli as tomllib  # type: ignore[import-not-found,unused-ignore]
-
-    if key not in VALID_CONFIG_KEYS:
-        valid_keys = ", ".join(sorted(VALID_CONFIG_KEYS))
-        raise click.ClickException(f"Invalid config key: {key}\nValid keys: {valid_keys}") from None
-
-    # Convert value to appropriate type
-    typed_value = _convert_value(key, value)
-
-    user_config, project_config = _get_config_paths()
-    config_path = project_config if project else user_config
-
-    # Load existing config or create empty structure
-    existing: dict[str, Any] = {}
-    if config_path.exists():
-        with open(config_path, "rb") as f:
-            existing = tomllib.load(f)
-
-    # Update the nested value
-    keys = key.split(".")
-    current = existing
-    for k in keys[:-1]:
-        if k not in current:
-            current[k] = {}
-        current = current[k]
-    current[keys[-1]] = typed_value
-
-    # Write back as TOML
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    _write_toml(config_path, existing)
+    try:
+        config_path, typed_value = save_config_value(key, value, project=project)
+    except ConfigWriteError as e:
+        raise click.ClickException(str(e)) from None
 
     location = "project" if project else "user"
     click.echo(f"Set {key} = {typed_value} in {location} config")
-
-
-def _write_toml(path: Path, data: dict[str, Any]) -> None:
-    """Write data to a TOML file."""
-    lines: list[str] = []
-    _write_toml_section(lines, data, [])
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def _write_toml_section(lines: list[str], data: dict[str, Any], path_parts: list[str]) -> None:
-    """Recursively write TOML sections."""
-    # First, write any non-dict values at this level
-    simple_values = {k: v for k, v in data.items() if not isinstance(v, dict)}
-    nested_values = {k: v for k, v in data.items() if isinstance(v, dict)}
-
-    # Write section header if we're in a nested section and have values
-    if path_parts and (simple_values or nested_values):
-        section_name = ".".join(path_parts)
-        if lines:  # Add blank line before new section
-            lines.append("")
-        lines.append(f"[{section_name}]")
-
-    # Write simple key-value pairs
-    for key, value in sorted(simple_values.items()):
-        formatted = _format_toml_value(value)
-        lines.append(f"{key} = {formatted}")
-
-    # Recursively write nested sections
-    for key, value in sorted(nested_values.items()):
-        _write_toml_section(lines, value, path_parts + [key])
 
 
 def _create_full_registry() -> ToolRegistry:
@@ -763,7 +598,7 @@ def setup() -> None:
                     return
 
             # Set the API key in config
-            user_config, _ = _get_config_paths()
+            user_config, _ = get_config_paths()
             user_config.parent.mkdir(parents=True, exist_ok=True)
 
             import sys
@@ -782,7 +617,7 @@ def setup() -> None:
                 existing["llm"] = {}
             existing["llm"]["api_key"] = api_key
 
-            _write_toml(user_config, existing)
+            write_toml(user_config, existing)
             click.echo(f"API key saved to {user_config}")
             click.echo()
 
@@ -790,7 +625,7 @@ def setup() -> None:
     if not status.has_config_file:
         if click.confirm("Would you like to create a config file with defaults?"):
             status.config_path.parent.mkdir(parents=True, exist_ok=True)
-            _write_default_config(status.config_path)
+            write_default_config(status.config_path)
             click.echo(f"Config file created at {status.config_path}")
             click.echo()
 
