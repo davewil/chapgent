@@ -149,11 +149,19 @@ def test_project_context_with_values():
 
 def test_project_context_root_path_property():
     """Test ProjectContext.root_path property returns Path object."""
-    ctx = ProjectContext(root="/home/user/project")
+    import sys
+
+    # Use platform-appropriate absolute path
+    if sys.platform == "win32":
+        test_path = "C:\\Users\\user\\project"
+    else:
+        test_path = "/home/user/project"
+
+    ctx = ProjectContext(root=test_path)
     path = ctx.root_path
     # Path separators differ between platforms, so just check the parts
     assert path.parts[-1] == "project"
-    assert "user" in path.parts
+    assert "user" in path.parts or "Users" in path.parts
     assert path.is_absolute()
 
 
