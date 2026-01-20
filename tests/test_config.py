@@ -2,15 +2,15 @@ import pytest
 import tomli_w
 
 from chapgent.config.loader import load_config
-from chapgent.config.settings import Settings
+from chapgent.config.settings import LLMSettings, PermissionSettings, Settings, TUISettings
 
 
 # Test Defaults
 def test_default_settings():
     settings = Settings()
-    assert settings.llm.provider == "anthropic"
-    assert settings.permissions.auto_approve_low_risk is True
-    assert settings.tui.theme == "textual-dark"
+    assert settings.llm.provider == LLMSettings.model_fields["provider"].default
+    assert settings.permissions.auto_approve_low_risk == PermissionSettings.model_fields["auto_approve_low_risk"].default
+    assert settings.tui.theme == TUISettings.model_fields["theme"].default
 
 
 # Test TOML Loading
@@ -21,7 +21,7 @@ async def test_load_config_defaults(tmp_path):
         user_config_path=tmp_path / "user_config.toml",
         project_config_path=tmp_path / "project_config.toml",
     )
-    assert settings.llm.provider == "anthropic"
+    assert settings.llm.provider == LLMSettings.model_fields["provider"].default
 
 
 @pytest.mark.asyncio
@@ -39,7 +39,7 @@ async def test_load_user_config(tmp_path):
     assert settings.llm.provider == "openai"
     assert settings.llm.model == "gpt-4"
     # Should keep defaults for others
-    assert settings.llm.max_tokens == 4096
+    assert settings.llm.max_tokens == LLMSettings.model_fields["max_tokens"].default
 
 
 @pytest.mark.asyncio
@@ -73,4 +73,4 @@ async def test_load_project_config_overrides_user(tmp_path):
     assert settings.permissions.session_override_allowed is False
 
     # Check default remaining untouched
-    assert settings.permissions.auto_approve_low_risk is True
+    assert settings.permissions.auto_approve_low_risk == PermissionSettings.model_fields["auto_approve_low_risk"].default

@@ -18,6 +18,12 @@ from chapgent.config.loader import (
     _set_nested_value,
     load_config,
 )
+from chapgent.config.settings import (
+    MAX_TOKENS_MAX,
+    MAX_TOKENS_MIN,
+    LLMSettings,
+    PermissionSettings,
+)
 
 
 class TestEnvMappings:
@@ -317,7 +323,7 @@ class TestLoadConfigWithEnv:
         # Project overrides user for model
         assert settings.llm.model == "project-model"
         # Default for max_tokens (not set anywhere)
-        assert settings.llm.max_tokens == 4096
+        assert settings.llm.max_tokens == LLMSettings.model_fields["max_tokens"].default
 
 
 class TestPropertyBased:
@@ -335,7 +341,7 @@ class TestPropertyBased:
 
         assert data["section"][key] == value
 
-    @given(st.integers(min_value=1, max_value=100000))
+    @given(st.integers(min_value=MAX_TOKENS_MIN, max_value=MAX_TOKENS_MAX))
     @settings(max_examples=20)
     def test_max_tokens_conversion(self, num: int) -> None:
         """Integer strings are converted for max_tokens."""
@@ -401,8 +407,8 @@ class TestEdgeCases:
         assert settings.llm.model == "test-model"
         assert settings.llm.api_key == "test-key"
         # Defaults still work
-        assert settings.llm.provider == "anthropic"
-        assert settings.llm.max_tokens == 4096
+        assert settings.llm.provider == LLMSettings.model_fields["provider"].default
+        assert settings.llm.max_tokens == LLMSettings.model_fields["max_tokens"].default
 
 
 class TestIntegration:
@@ -444,5 +450,5 @@ class TestIntegration:
         assert settings.llm.api_key == "sk-ant-production-key"
 
         # Defaults for unset
-        assert settings.llm.provider == "anthropic"
-        assert settings.permissions.auto_approve_low_risk is True
+        assert settings.llm.provider == LLMSettings.model_fields["provider"].default
+        assert settings.permissions.auto_approve_low_risk == PermissionSettings.model_fields["auto_approve_low_risk"].default

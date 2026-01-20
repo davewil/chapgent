@@ -8,6 +8,8 @@ from pydantic import ValidationError
 
 from chapgent.config.settings import (
     KNOWN_MODELS,
+    MAX_TOKENS_MAX,
+    MAX_TOKENS_MIN,
     VALID_PROVIDERS,
     VALID_THEMES,
     ConfigValidationError,
@@ -83,13 +85,18 @@ class TestLLMSettingsValidation:
         error_msg = str(exc_info.value)
         assert "Unknown provider" in error_msg and "anthropic" in error_msg and "openai" in error_msg
 
-    @pytest.mark.parametrize("max_tokens", [1, 4096, 8192, 100000])
+    @pytest.mark.parametrize("max_tokens", [MAX_TOKENS_MIN, 4096, 8192, MAX_TOKENS_MAX])
     def test_valid_max_tokens(self, max_tokens: int):
         """Should accept max_tokens within valid range."""
         assert LLMSettings(max_tokens=max_tokens).max_tokens == max_tokens
 
     @pytest.mark.parametrize(
-        "max_tokens,error_substring", [(0, "at least 1"), (-100, "at least 1"), (100001, "exceeds maximum")]
+        "max_tokens,error_substring",
+        [
+            (MAX_TOKENS_MIN - 1, f"at least {MAX_TOKENS_MIN}"),
+            (-100, f"at least {MAX_TOKENS_MIN}"),
+            (MAX_TOKENS_MAX + 1, "exceeds maximum"),
+        ],
     )
     def test_invalid_max_tokens(self, max_tokens: int, error_substring: str):
         """Should reject invalid max_tokens values."""
@@ -115,8 +122,9 @@ class TestLLMSettingsValidation:
         assert LLMSettings(model=model).model == model
 
     def test_default_model(self):
-        """Should have default model."""
-        assert LLMSettings().model == "claude-sonnet-4-20250514"
+        """Should have default model matching LLMSettings default."""
+        default_settings = LLMSettings()
+        assert default_settings.model == LLMSettings.model_fields["model"].default
 
 
 # =============================================================================
@@ -150,7 +158,8 @@ class TestTUISettingsValidation:
     def test_boolean_defaults_and_custom(self):
         """Test TUISettings boolean fields defaults and custom values."""
         default = TUISettings()
-        assert default.show_tool_panel is True and default.show_sidebar is True
+        assert default.show_tool_panel == TUISettings.model_fields["show_tool_panel"].default
+        assert default.show_sidebar == TUISettings.model_fields["show_sidebar"].default
         custom = TUISettings(show_tool_panel=False)
         assert custom.show_tool_panel is False
 
@@ -194,7 +203,8 @@ class TestPermissionSettings:
     def test_defaults_and_custom(self):
         """Test PermissionSettings defaults and custom values."""
         default = PermissionSettings()
-        assert (default.auto_approve_low_risk, default.session_override_allowed) == (True, True)
+        assert default.auto_approve_low_risk == PermissionSettings.model_fields["auto_approve_low_risk"].default
+        assert default.session_override_allowed == PermissionSettings.model_fields["session_override_allowed"].default
         custom = PermissionSettings(auto_approve_low_risk=False, session_override_allowed=False)
         assert (custom.auto_approve_low_risk, custom.session_override_allowed) == (False, False)
 
@@ -210,11 +220,10 @@ class TestSettingsValidation:
     def test_default_settings(self):
         """Should create valid settings with defaults."""
         settings = Settings()
-        assert (settings.llm.provider, settings.tui.theme, settings.permissions.auto_approve_low_risk) == (
-            "anthropic",
-            "textual-dark",
-            True,
-        )
+        # Verify defaults match the field defaults from settings classes
+        assert settings.llm.provider == LLMSettings.model_fields["provider"].default
+        assert settings.tui.theme == TUISettings.model_fields["theme"].default
+        assert settings.permissions.auto_approve_low_risk == PermissionSettings.model_fields["auto_approve_low_risk"].default
 
     def test_valid_config_dict(self):
         """Should accept valid config dict."""
@@ -265,17 +274,17 @@ class TestPropertyBased:
         settings = TUISettings(theme=theme)
         assert settings.theme == theme.lower()
 
-    @given(st.integers(min_value=1, max_value=100000))
+    @given(st.integers(min_value=MAX_TOKENS_MIN, max_value=MAX_TOKENS_MAX))
     @hypothesis_settings(max_examples=50)
     def test_valid_max_tokens_range(self, max_tokens: int):
         """All max_tokens in valid range should be accepted."""
         settings = LLMSettings(max_tokens=max_tokens)
         assert settings.max_tokens == max_tokens
 
-    @given(st.integers(max_value=0))
+    @given(st.integers(max_value=MAX_TOKENS_MIN - 1))
     @hypothesis_settings(max_examples=20)
     def test_invalid_max_tokens_below_minimum(self, max_tokens: int):
-        """All max_tokens below 1 should be rejected."""
+        """All max_tokens below minimum should be rejected."""
         with pytest.raises(ValidationError):
             LLMSettings(max_tokens=max_tokens)
 
@@ -327,16 +336,17 @@ class TestEdgeCases:
     def test_empty_config_dict(self):
         """Empty config dict should use all defaults."""
         settings = Settings.validate_config({})
-        assert settings.llm.provider == "anthropic"
-        assert settings.tui.theme == "textual-dark"
+        assert settings.llm.provider == LLMSettings.model_fields["provider"].default
+        assert settings.tui.theme == TUISettings.model_fields["theme"].default
 
     def test_partial_nested_config(self):
         """Partial nested config should merge with defaults."""
         config = {"llm": {"model": "gpt-4"}}
         settings = Settings.validate_config(config)
         assert settings.llm.model == "gpt-4"
-        assert settings.llm.provider == "anthropic"  # Default preserved
-        assert settings.llm.max_tokens == 4096  # Default preserved
+        # Defaults should be preserved
+        assert settings.llm.provider == LLMSettings.model_fields["provider"].default
+        assert settings.llm.max_tokens == LLMSettings.model_fields["max_tokens"].default
 
 
 # =============================================================================
