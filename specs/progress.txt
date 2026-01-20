@@ -1317,3 +1317,43 @@
   - Learned: ToolCategory enum values can be used directly for category filtering
   - Phase 3 of Phase 5 TUI Enhancements complete (HelpScreen and ToolsScreen)
   - Total: 286 TUI tests pass (95 screens tests)
+
+2026-01-20: Test Refactoring - Behavioral Tests Focus:
+  - Refactored tests to focus on behavioral tests (user-facing behavior) vs implementation details
+  - Goal: Reduce test-to-production code ratio from 1.7:1 to 0.5-1:1
+  - Refactored tests/test_tui/test_screens.py:
+    * Before: 1,709 lines, 87 tests, 28 classes
+    * After: 448 lines, 25 tests, 5 classes (74% reduction)
+    * Consolidated into behavioral classes: TestThemePicker, TestLLMSettings, TestHelpScreen, TestToolsScreen, TestSlashCommands
+  - Refactored tests/test_tools/test_search.py:
+    * Before: 1,256 lines, 65 tests, 5+ classes
+    * After: 389 lines, 29 tests, 4 classes (69% reduction)
+    * Consolidated into: TestGrepSearch, TestFindFiles, TestFindDefinition, TestErrorHandling
+    * Removed property-based tests, internal helper tests (_should_include_path, etc.)
+  - Refactored tests/test_core/test_loop.py:
+    * Before: 1,196 lines, 36 tests, 12 classes
+    * After: ~500 lines, 14 tests, 7 classes (58% reduction)
+    * Consolidated into: TestToolExecution, TestIterationLimits, TestTokenLimits, TestTokenTracking, TestSystemPrompt, TestErrorHandling
+    * Removed duplicate tests, property-based tests
+  - Refactored tests/test_core/test_parallel.py:
+    * Before: 936 lines, 53 tests, 15+ classes
+    * After: 316 lines, 10 tests, 5 classes (66% reduction)
+    * Consolidated into: TestParallelReads, TestSequentialWrites, TestErrorHandling, TestCaching, TestEdgeCases
+    * Removed internal helper tests (paths_conflict, is_read_only_tool, etc.), property-based tests
+  - Refactored tests/test_tools/test_testing.py:
+    * Before: 1,073 lines, 72 tests, 17+ classes
+    * After: 313 lines, 24 tests, 4 classes (71% reduction)
+    * Consolidated into: TestFrameworkDetection, TestOutputParsing, TestRunTests, TestErrorHandling
+    * Removed dataclass tests, internal parser tests, command building tests, property-based tests
+  - Test statistics progress:
+    * Started: 1.7:1 ratio (21,822 test lines / 12,831 production lines)
+    * After refactoring: 1.4:1 ratio (17,914 test lines / 12,831 production lines)
+    * Tests reduced: 1386 -> 1295 (91 tests removed via consolidation)
+    * Test lines reduced: 3,908 lines (18% reduction)
+  - Learned: Behavioral tests answer "When the user does X, what happens?" not "Does this internal function work?"
+  - Learned: Property-based tests of internal helpers often don't test user behavior
+  - Learned: Testing dataclass creation is typically not behavioral testing
+  - Learned: Test consolidation improves maintainability without reducing coverage of user-facing behavior
+  - Learned: Mock side_effect with lambda functions is more flexible than lists for complex scenarios
+  - Learned: conversation_loop catches LLM errors and yields llm_error events, doesn't raise
+  - Total: 1295 tests pass

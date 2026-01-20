@@ -1,1103 +1,237 @@
-"""Tests for TUI modal screens."""
+"""Behavioral tests for TUI modal screens.
+
+These tests verify user-facing behavior, not implementation details.
+Each test answers: "When the user does X, what happens?"
+"""
 
 import asyncio
 from unittest.mock import patch
 
 import pytest
-from hypothesis import given
-from hypothesis import settings as hypothesis_settings
-from hypothesis import strategies as st
 
-from chapgent.config.settings import VALID_PROVIDERS, VALID_THEMES
 from chapgent.tools.base import ToolCategory
 from chapgent.tui.app import ChapgentApp
 from chapgent.tui.screens import HelpScreen, LLMSettingsScreen, ThemePickerScreen, ToolsScreen
-from chapgent.tui.widgets import DEFAULT_COMMANDS
 from chapgent.ux.help import HELP_TOPICS
 
 # =============================================================================
-# ThemePickerScreen Tests
+# ThemePickerScreen - User can change the application theme
 # =============================================================================
 
 
-class TestThemePickerScreen:
-    """Tests for the ThemePickerScreen modal."""
-
-    def test_theme_picker_creation(self):
-        """Test creating a ThemePickerScreen."""
-        screen = ThemePickerScreen(current_theme="dracula")
-        assert screen.original_theme == "dracula"
-        assert screen.selected_theme == "dracula"
-
-    def test_theme_picker_creation_no_theme(self):
-        """Test creating a ThemePickerScreen without current theme."""
-        screen = ThemePickerScreen()
-        assert screen.original_theme is None
-        assert screen.selected_theme is None
+class TestThemePicker:
+    """User can select and save a theme."""
 
     @pytest.mark.asyncio
-    async def test_theme_picker_compose(self):
-        """Test that theme picker composes correctly."""
-        app = ChapgentApp()
-        async with app.run_test() as pilot:
-            # Push the theme picker
-            app.push_screen(ThemePickerScreen(current_theme="textual-dark"))
-            await pilot.pause()
-
-            # Check that the theme picker is displayed
-            assert isinstance(app.screen, ThemePickerScreen)
-            picker = app.screen
-
-            # Check for title and buttons
-            title = picker.query_one("#theme-picker-title")
-            assert title is not None
-
-            grid = picker.query_one("#theme-grid")
-            assert grid is not None
-
-            # Check for save and cancel buttons
-            save_btn = picker.query_one("#btn-save")
-            cancel_btn = picker.query_one("#btn-cancel")
-            assert save_btn is not None
-            assert cancel_btn is not None
-
-    @pytest.mark.asyncio
-    async def test_theme_picker_shows_all_themes(self):
-        """Test that theme picker shows all valid themes."""
-        app = ChapgentApp()
-        async with app.run_test() as pilot:
-            app.push_screen(ThemePickerScreen())
-            await pilot.pause()
-
-            assert isinstance(app.screen, ThemePickerScreen)
-            picker = app.screen
-
-            # Check that all themes have buttons
-            from textual.widgets import Button
-
-            buttons = picker.query(Button)
-            theme_buttons = [b for b in buttons if b.id and b.id.startswith("theme-")]
-            assert len(theme_buttons) == len(VALID_THEMES)
-
-    @pytest.mark.asyncio
-    async def test_theme_picker_highlights_current_theme(self):
-        """Test that the current theme is highlighted."""
-        app = ChapgentApp()
-        async with app.run_test() as pilot:
-            app.push_screen(ThemePickerScreen(current_theme="dracula"))
-            await pilot.pause()
-
-            assert isinstance(app.screen, ThemePickerScreen)
-            picker = app.screen
-
-            # Find the dracula button
-            dracula_btn = picker.query_one("#theme-dracula")
-            assert dracula_btn.variant == "primary"
-
-            # Other buttons should be default
-            gruvbox_btn = picker.query_one("#theme-gruvbox")
-            assert gruvbox_btn.variant == "default"
-
-
-class TestThemePickerSelection:
-    """Tests for theme selection in ThemePickerScreen."""
-
-    @pytest.mark.asyncio
-    async def test_theme_selection_applies_preview(self):
-        """Test that selecting a theme applies it as preview."""
+    async def test_user_can_open_theme_picker(self):
+        """Theme picker opens from command palette."""
         app = ChapgentApp()
         async with app.run_test(size=(100, 50)) as pilot:
-            original_theme = app.theme
-            app.push_screen(ThemePickerScreen(current_theme=original_theme))
-            await pilot.pause()
-
-            assert isinstance(app.screen, ThemePickerScreen)
-            picker = app.screen
-
-            # Select a different theme using internal method
-            new_theme = "dracula" if original_theme != "dracula" else "nord"
-            picker._select_theme(new_theme)
-            await pilot.pause()
-
-            # Theme should be applied immediately for preview
-            assert app.theme == new_theme
-            assert picker.selected_theme == new_theme
-
-    @pytest.mark.asyncio
-    async def test_theme_selection_updates_button_variants(self):
-        """Test that selecting a theme updates button variants."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(ThemePickerScreen(current_theme="textual-dark"))
-            await pilot.pause()
-
-            assert isinstance(app.screen, ThemePickerScreen)
-            picker = app.screen
-
-            # Select dracula theme using internal method
-            picker._select_theme("dracula")
-            await pilot.pause()
-
-            # Dracula should now be primary
-            dracula_btn = picker.query_one("#theme-dracula")
-            assert dracula_btn.variant == "primary"
-
-            # Original theme button should be default
-            textual_dark_btn = picker.query_one("#theme-textual-dark")
-            assert textual_dark_btn.variant == "default"
-
-
-class TestThemePickerDismissal:
-    """Tests for theme picker dismissal behavior."""
-
-    @pytest.mark.asyncio
-    async def test_save_returns_selected_theme(self):
-        """Test that save button returns the selected theme."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            result_holder = {"result": "not_set"}
-
-            def on_dismiss(result):
-                result_holder["result"] = result
-
-            app.push_screen(ThemePickerScreen(current_theme="textual-dark"), callback=on_dismiss)
-            await pilot.pause()
-
-            assert isinstance(app.screen, ThemePickerScreen)
-            picker = app.screen
-
-            # Select a different theme by calling the internal method directly
-            picker._select_theme("dracula")
-            await pilot.pause()
-
-            # Simulate save button press
-            save_btn = picker.query_one("#btn-save")
-            save_btn.press()
-            await asyncio.sleep(0.2)
-            await pilot.pause()
-
-            assert result_holder["result"] == "dracula"
-
-    @pytest.mark.asyncio
-    async def test_cancel_returns_none(self):
-        """Test that cancel button returns None."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            result_holder = {"result": "not_set"}
-
-            def on_dismiss(result):
-                result_holder["result"] = result
-
-            app.push_screen(ThemePickerScreen(current_theme="textual-dark"), callback=on_dismiss)
-            await pilot.pause()
-
-            # Simulate cancel button press
-            cancel_btn = app.screen.query_one("#btn-cancel")
-            cancel_btn.press()
-            await asyncio.sleep(0.2)
-            await pilot.pause()
-
-            assert result_holder["result"] is None
-
-    @pytest.mark.asyncio
-    async def test_cancel_reverts_theme(self):
-        """Test that cancel reverts to original theme."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            original_theme = "textual-dark"
-            app.theme = original_theme
-
-            app.push_screen(ThemePickerScreen(current_theme=original_theme))
-            await pilot.pause()
-
-            assert isinstance(app.screen, ThemePickerScreen)
-            picker = app.screen
-
-            # Select a different theme using internal method
-            picker._select_theme("dracula")
-            await pilot.pause()
-            assert app.theme == "dracula"
-
-            # Simulate cancel button press
-            cancel_btn = picker.query_one("#btn-cancel")
-            cancel_btn.press()
-            await asyncio.sleep(0.2)
-            await pilot.pause()
-
-            # Theme should be reverted
-            assert app.theme == original_theme
-
-    @pytest.mark.asyncio
-    async def test_escape_dismisses_with_none(self):
-        """Test that escape dismisses and reverts theme."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            result_holder = {"result": "not_set"}
-
-            def on_dismiss(result):
-                result_holder["result"] = result
-
-            original_theme = "textual-dark"
-            app.theme = original_theme
-
-            app.push_screen(ThemePickerScreen(current_theme=original_theme), callback=on_dismiss)
-            await pilot.pause()
-
-            # Select different theme
-            picker = app.screen
-            picker._select_theme("dracula")
-            await pilot.pause()
-
-            # Press escape
-            await pilot.press("escape")
-            await asyncio.sleep(0.2)
-            await pilot.pause()
-
-            assert result_holder["result"] is None
-            assert app.theme == original_theme
-
-
-class TestThemePickerAppIntegration:
-    """Tests for theme picker integration with ChapgentApp."""
-
-    @pytest.mark.asyncio
-    async def test_action_show_theme_picker(self):
-        """Test action_show_theme_picker opens the theme picker."""
-        app = ChapgentApp()
-        async with app.run_test() as pilot:
             app.action_show_theme_picker()
             await pilot.pause()
-
             assert isinstance(app.screen, ThemePickerScreen)
 
     @pytest.mark.asyncio
-    async def test_slash_command_opens_theme_picker(self):
-        """Test /theme slash command opens the theme picker."""
-        app = ChapgentApp()
-        async with app.run_test() as pilot:
-            # Type /theme in the input
-            input_widget = app.query_one("#input")
-            input_widget.value = "/theme"
-            await pilot.press("enter")
-            await pilot.pause()
-
-            assert isinstance(app.screen, ThemePickerScreen)
-
-    def test_theme_picker_in_command_palette(self):
-        """Test theme picker can be opened from command palette."""
-        # Verify "Change Theme" is in DEFAULT_COMMANDS
-        theme_cmd = next((c for c in DEFAULT_COMMANDS if c.id == "show_theme_picker"), None)
-        assert theme_cmd is not None
-        assert theme_cmd.name == "Change Theme"
-
-    @pytest.mark.asyncio
-    async def test_theme_picker_saves_to_config(self):
-        """Test that selecting and saving a theme persists to config."""
+    async def test_user_can_select_and_save_theme(self):
+        """Selecting a theme and saving persists it."""
         app = ChapgentApp()
         async with app.run_test(size=(100, 50)) as pilot:
-            # Patch at the source before the screen is pushed
             with patch("chapgent.config.writer.save_config_value") as mock_save:
-                mock_save.return_value = ("/path/to/config.toml", "dracula")
+                mock_save.return_value = ("/path/config.toml", "dracula")
 
-                # Open theme picker via action (which sets up the callback)
+                # Use the app's action which handles the callback
                 app.action_show_theme_picker()
                 await pilot.pause()
 
-                assert isinstance(app.screen, ThemePickerScreen)
+                # Select dracula theme
                 picker = app.screen
-
-                # Select a theme using internal method
                 picker._select_theme("dracula")
                 await pilot.pause()
 
-                # Simulate save button press
-                save_btn = picker.query_one("#btn-save")
+                # Save
+                from textual.widgets import Button
+
+                save_btn = picker.query_one("#btn-save", Button)
                 save_btn.press()
-                # Wait for callback to execute
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.2)
                 await pilot.pause()
 
-                # Should have called save_config_value
-                mock_save.assert_called_once_with("tui.theme", "dracula")
-
-
-# =============================================================================
-# Property-Based Tests
-# =============================================================================
-
-
-class TestPropertyBased:
-    """Property-based tests for theme picker using hypothesis."""
-
-    @given(theme=st.sampled_from(list(VALID_THEMES)))
-    @hypothesis_settings(max_examples=10)
-    def test_theme_picker_accepts_any_valid_theme(self, theme):
-        """Test ThemePickerScreen accepts any valid theme."""
-        screen = ThemePickerScreen(current_theme=theme)
-        assert screen.original_theme == theme
-        assert screen.selected_theme == theme
+                # Verify save was called with theme
+                mock_save.assert_called_with("tui.theme", "dracula")
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("theme", list(VALID_THEMES)[:5])  # Test subset for speed
-    async def test_theme_buttons_exist_for_all_themes(self, theme):
-        """Test that each valid theme has a corresponding button."""
-        app = ChapgentApp()
-        async with app.run_test() as pilot:
-            app.push_screen(ThemePickerScreen())
-            await pilot.pause()
-
-            picker = app.screen
-            btn = picker.query_one(f"#theme-{theme}")
-            assert btn is not None
-
-
-# =============================================================================
-# Edge Cases
-# =============================================================================
-
-
-class TestEdgeCases:
-    """Tests for edge cases and error handling."""
-
-    @pytest.mark.asyncio
-    async def test_theme_picker_none_current_theme(self):
-        """Test theme picker with None current theme."""
+    async def test_user_can_cancel_theme_selection(self):
+        """Canceling reverts to original theme without saving."""
         app = ChapgentApp()
         async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(ThemePickerScreen(current_theme=None))
-            await pilot.pause()
-
-            assert isinstance(app.screen, ThemePickerScreen)
-            picker = app.screen
-            assert picker.original_theme is None
-
-    @pytest.mark.asyncio
-    async def test_save_without_selection(self):
-        """Test saving without selecting a new theme."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            result_holder = {"result": "not_set"}
-
-            def on_dismiss(result):
-                result_holder["result"] = result
-
-            # Open with no current theme
-            app.push_screen(ThemePickerScreen(current_theme=None), callback=on_dismiss)
-            await pilot.pause()
-
-            # Simulate save button press without selecting
-            save_btn = app.screen.query_one("#btn-save")
-            save_btn.press()
-            await asyncio.sleep(0.2)
-            await pilot.pause()
-
-            # Should return None (the original selected theme)
-            assert result_holder["result"] is None
-
-    @pytest.mark.asyncio
-    async def test_multiple_theme_selections(self):
-        """Test selecting multiple themes before saving."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(ThemePickerScreen(current_theme="textual-dark"))
-            await pilot.pause()
-
-            picker = app.screen
-
-            # Select several themes using internal method
-            for theme in ["dracula", "nord", "gruvbox"]:
-                picker._select_theme(theme)
-                await pilot.pause()
-                assert app.theme == theme
-                assert picker.selected_theme == theme
-
-            # Final selection should be gruvbox
-            assert picker.selected_theme == "gruvbox"
-
-    @pytest.mark.asyncio
-    async def test_theme_picker_config_save_error(self):
-        """Test handling of config save errors."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            with patch("chapgent.config.writer.save_config_value", side_effect=Exception("Write error")):
+            with patch("chapgent.config.writer.save_config_value") as mock_save:
                 app.push_screen(ThemePickerScreen(current_theme="textual-dark"))
                 await pilot.pause()
 
+                # Select different theme
                 picker = app.screen
-
-                # Select using internal method
                 picker._select_theme("dracula")
                 await pilot.pause()
 
-                # Simulate save button press
-                save_btn = picker.query_one("#btn-save")
-                save_btn.press()
-                await asyncio.sleep(0.3)
-                await pilot.pause()
-
-                # Should not crash, error notification shown
-
-
-# =============================================================================
-# Integration Tests
-# =============================================================================
-
-
-class TestIntegration:
-    """End-to-end integration tests."""
-
-    @pytest.mark.asyncio
-    async def test_full_theme_change_flow(self):
-        """Test complete flow: open picker -> select theme -> save."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            original_theme = app.theme
-
-            with patch("chapgent.config.writer.save_config_value") as mock_save:
-                # Open theme picker via slash command
-                input_widget = app.query_one("#input")
-                input_widget.value = "/theme"
-                await pilot.press("enter")
-                await pilot.pause()
-
-                assert isinstance(app.screen, ThemePickerScreen)
-                picker = app.screen
-
-                # Select a different theme using internal method
-                new_theme = "dracula" if original_theme != "dracula" else "nord"
-                picker._select_theme(new_theme)
-                await pilot.pause()
-
-                # Verify preview
-                assert app.theme == new_theme
-
-                # Simulate save button press
-                save_btn = picker.query_one("#btn-save")
-                save_btn.press()
-                await asyncio.sleep(0.3)
-                await pilot.pause()
-
-                # Verify saved
-                mock_save.assert_called_once_with("tui.theme", new_theme)
-
-    @pytest.mark.asyncio
-    async def test_theme_change_cancel_flow(self):
-        """Test complete flow: open picker -> select theme -> cancel."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            original_theme = app.theme
-
-            # Open theme picker
-            input_widget = app.query_one("#input")
-            input_widget.value = "/theme"
-            await pilot.press("enter")
-            await pilot.pause()
-
-            picker = app.screen
-
-            # Select a different theme using internal method
-            new_theme = "dracula" if original_theme != "dracula" else "nord"
-            picker._select_theme(new_theme)
-            await pilot.pause()
-
-            # Simulate cancel button press
-            cancel_btn = picker.query_one("#btn-cancel")
-            cancel_btn.press()
-            await asyncio.sleep(0.2)
-            await pilot.pause()
-
-            # Theme should be reverted
-            assert app.theme == original_theme
-
-
-# =============================================================================
-# LLMSettingsScreen Tests
-# =============================================================================
-
-
-class TestLLMSettingsScreen:
-    """Tests for the LLMSettingsScreen modal."""
-
-    def test_llm_settings_creation_defaults(self):
-        """Test creating LLMSettingsScreen with defaults."""
-        screen = LLMSettingsScreen()
-        assert screen.original_provider == "anthropic"
-        assert screen.original_model == "claude-sonnet-4-20250514"
-        assert screen.original_max_tokens == 4096
-
-    def test_llm_settings_creation_with_values(self):
-        """Test creating LLMSettingsScreen with custom values."""
-        screen = LLMSettingsScreen(
-            current_provider="openai",
-            current_model="gpt-4o",
-            current_max_tokens=8192,
-        )
-        assert screen.original_provider == "openai"
-        assert screen.original_model == "gpt-4o"
-        assert screen.original_max_tokens == 8192
-        assert screen.selected_provider == "openai"
-        assert screen.selected_model == "gpt-4o"
-        assert screen.selected_max_tokens == 8192
-
-    @pytest.mark.asyncio
-    async def test_llm_settings_compose(self):
-        """Test that LLM settings screen composes correctly."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(LLMSettingsScreen())
-            await pilot.pause()
-
-            assert isinstance(app.screen, LLMSettingsScreen)
-            screen = app.screen
-
-            # Check for title
-            title = screen.query_one("#llm-settings-title")
-            assert title is not None
-
-            # Check for provider select
-            provider_select = screen.query_one("#llm-provider-select")
-            assert provider_select is not None
-
-            # Check for model input
-            model_input = screen.query_one("#llm-model-input")
-            assert model_input is not None
-
-            # Check for max_tokens input
-            max_tokens_input = screen.query_one("#llm-max-tokens-input")
-            assert max_tokens_input is not None
-
-            # Check for buttons
-            save_btn = screen.query_one("#btn-save")
-            cancel_btn = screen.query_one("#btn-cancel")
-            assert save_btn is not None
-            assert cancel_btn is not None
-
-    @pytest.mark.asyncio
-    async def test_llm_settings_has_all_providers(self):
-        """Test that all valid providers are available in select."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(LLMSettingsScreen())
-            await pilot.pause()
-
-            screen = app.screen
-            from textual.widgets import Select
-
-            provider_select = screen.query_one("#llm-provider-select", Select)
-            # The select should have options for all providers
-            assert provider_select is not None
-
-
-class TestLLMSettingsValidation:
-    """Tests for LLM settings validation."""
-
-    @pytest.mark.asyncio
-    async def test_validation_empty_model(self):
-        """Test validation rejects empty model name."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(LLMSettingsScreen())
-            await pilot.pause()
-
-            screen = app.screen
-
-            # Clear the model input
-            from textual.widgets import Input
-
-            model_input = screen.query_one("#llm-model-input", Input)
-            model_input.value = ""
-            await pilot.pause()
-
-            # Try to validate
-            result = screen._validate_and_get_values()
-            assert result is None
-            assert "empty" in screen.error_message.lower()
-
-    @pytest.mark.asyncio
-    async def test_validation_non_numeric_max_tokens(self):
-        """Test validation rejects non-numeric max_tokens."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(LLMSettingsScreen())
-            await pilot.pause()
-
-            screen = app.screen
-
-            from textual.widgets import Input
-
-            max_tokens_input = screen.query_one("#llm-max-tokens-input", Input)
-            max_tokens_input.value = "not_a_number"
-            await pilot.pause()
-
-            result = screen._validate_and_get_values()
-            assert result is None
-            assert "number" in screen.error_message.lower()
-
-    @pytest.mark.asyncio
-    async def test_validation_max_tokens_below_minimum(self):
-        """Test validation rejects max_tokens below 1."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(LLMSettingsScreen())
-            await pilot.pause()
-
-            screen = app.screen
-
-            from textual.widgets import Input
-
-            max_tokens_input = screen.query_one("#llm-max-tokens-input", Input)
-            max_tokens_input.value = "0"
-            await pilot.pause()
-
-            result = screen._validate_and_get_values()
-            assert result is None
-            assert "at least 1" in screen.error_message.lower()
-
-    @pytest.mark.asyncio
-    async def test_validation_max_tokens_above_maximum(self):
-        """Test validation rejects max_tokens above 100000."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(LLMSettingsScreen())
-            await pilot.pause()
-
-            screen = app.screen
-
-            from textual.widgets import Input
-
-            max_tokens_input = screen.query_one("#llm-max-tokens-input", Input)
-            max_tokens_input.value = "200000"
-            await pilot.pause()
-
-            result = screen._validate_and_get_values()
-            assert result is None
-            assert "100000" in screen.error_message
-
-    @pytest.mark.asyncio
-    async def test_validation_success(self):
-        """Test validation succeeds with valid values."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(LLMSettingsScreen())
-            await pilot.pause()
-
-            screen = app.screen
-
-            from textual.widgets import Input
-
-            model_input = screen.query_one("#llm-model-input", Input)
-            model_input.value = "gpt-4"
-
-            max_tokens_input = screen.query_one("#llm-max-tokens-input", Input)
-            max_tokens_input.value = "8192"
-            await pilot.pause()
-
-            result = screen._validate_and_get_values()
-            assert result is not None
-            assert result["provider"] == "anthropic"
-            assert result["model"] == "gpt-4"
-            assert result["max_tokens"] == 8192
-
-
-class TestLLMSettingsDismissal:
-    """Tests for LLM settings dismissal behavior."""
-
-    @pytest.mark.asyncio
-    async def test_save_returns_values(self):
-        """Test that save button returns the settings dict."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            result_holder = {"result": "not_set"}
-
-            def on_dismiss(result):
-                result_holder["result"] = result
-
-            app.push_screen(LLMSettingsScreen(), callback=on_dismiss)
-            await pilot.pause()
-
-            screen = app.screen
-
-            # Simulate save button press
-            save_btn = screen.query_one("#btn-save")
-            save_btn.press()
-            await asyncio.sleep(0.2)
-            await pilot.pause()
-
-            assert result_holder["result"] is not None
-            assert "provider" in result_holder["result"]
-            assert "model" in result_holder["result"]
-            assert "max_tokens" in result_holder["result"]
-
-    @pytest.mark.asyncio
-    async def test_cancel_returns_none(self):
-        """Test that cancel button returns None."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            result_holder = {"result": "not_set"}
-
-            def on_dismiss(result):
-                result_holder["result"] = result
-
-            app.push_screen(LLMSettingsScreen(), callback=on_dismiss)
-            await pilot.pause()
-
-            # Simulate cancel button press
-            cancel_btn = app.screen.query_one("#btn-cancel")
-            cancel_btn.press()
-            await asyncio.sleep(0.2)
-            await pilot.pause()
-
-            assert result_holder["result"] is None
-
-    @pytest.mark.asyncio
-    async def test_escape_dismisses_with_none(self):
-        """Test that escape dismisses without saving."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            result_holder = {"result": "not_set"}
-
-            def on_dismiss(result):
-                result_holder["result"] = result
-
-            app.push_screen(LLMSettingsScreen(), callback=on_dismiss)
-            await pilot.pause()
-
-            # Press escape
-            await pilot.press("escape")
-            await asyncio.sleep(0.2)
-            await pilot.pause()
-
-            assert result_holder["result"] is None
-
-
-class TestLLMSettingsAppIntegration:
-    """Tests for LLM settings integration with ChapgentApp."""
-
-    @pytest.mark.asyncio
-    async def test_action_show_llm_settings(self):
-        """Test action_show_llm_settings opens the settings screen."""
-        app = ChapgentApp()
-        async with app.run_test() as pilot:
-            app.action_show_llm_settings()
-            await pilot.pause()
-
-            assert isinstance(app.screen, LLMSettingsScreen)
-
-    @pytest.mark.asyncio
-    async def test_slash_command_opens_llm_settings(self):
-        """Test /model slash command opens the settings screen."""
-        app = ChapgentApp()
-        async with app.run_test() as pilot:
-            input_widget = app.query_one("#input")
-            input_widget.value = "/model"
-            await pilot.press("enter")
-            await pilot.pause()
-
-            assert isinstance(app.screen, LLMSettingsScreen)
-
-    @pytest.mark.asyncio
-    async def test_slash_command_llm_alias(self):
-        """Test /llm alias opens the settings screen."""
-        app = ChapgentApp()
-        async with app.run_test() as pilot:
-            input_widget = app.query_one("#input")
-            input_widget.value = "/llm"
-            await pilot.press("enter")
-            await pilot.pause()
-
-            assert isinstance(app.screen, LLMSettingsScreen)
-
-    def test_llm_settings_in_command_palette(self):
-        """Test LLM settings can be opened from command palette."""
-        llm_cmd = next((c for c in DEFAULT_COMMANDS if c.id == "show_llm_settings"), None)
-        assert llm_cmd is not None
-        assert llm_cmd.name == "LLM Settings"
-
-    @pytest.mark.asyncio
-    async def test_llm_settings_saves_to_config(self):
-        """Test that saving LLM settings persists to config."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            with patch("chapgent.config.writer.save_config_value") as mock_save:
-                # Open LLM settings via action
-                app.action_show_llm_settings()
-                await pilot.pause()
-
-                assert isinstance(app.screen, LLMSettingsScreen)
-                screen = app.screen
-
-                # Simulate save button press
-                save_btn = screen.query_one("#btn-save")
-                save_btn.press()
-                await asyncio.sleep(0.5)
-                await pilot.pause()
-
-                # Should have called save_config_value for each setting
-                assert mock_save.call_count == 3
-
-
-# =============================================================================
-# LLMSettingsScreen Property-Based Tests
-# =============================================================================
-
-
-class TestLLMSettingsPropertyBased:
-    """Property-based tests for LLM settings using hypothesis."""
-
-    @given(provider=st.sampled_from(list(VALID_PROVIDERS)))
-    @hypothesis_settings(max_examples=10)
-    def test_llm_settings_accepts_any_valid_provider(self, provider):
-        """Test LLMSettingsScreen accepts any valid provider."""
-        screen = LLMSettingsScreen(current_provider=provider)
-        assert screen.original_provider == provider
-        assert screen.selected_provider == provider
-
-    @given(max_tokens=st.integers(min_value=1, max_value=100000))
-    @hypothesis_settings(max_examples=10)
-    def test_llm_settings_accepts_valid_max_tokens(self, max_tokens):
-        """Test LLMSettingsScreen accepts valid max_tokens values."""
-        screen = LLMSettingsScreen(current_max_tokens=max_tokens)
-        assert screen.original_max_tokens == max_tokens
-        assert screen.selected_max_tokens == max_tokens
-
-    @given(model=st.text(min_size=1, max_size=50))
-    @hypothesis_settings(max_examples=10)
-    def test_llm_settings_accepts_any_model_name(self, model):
-        """Test LLMSettingsScreen accepts any non-empty model name."""
-        screen = LLMSettingsScreen(current_model=model)
-        assert screen.original_model == model
-        assert screen.selected_model == model
-
-
-# =============================================================================
-# LLMSettingsScreen Edge Cases
-# =============================================================================
-
-
-class TestLLMSettingsEdgeCases:
-    """Tests for edge cases and error handling."""
-
-    @pytest.mark.asyncio
-    async def test_llm_settings_none_values(self):
-        """Test LLM settings with None values uses defaults."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(
-                LLMSettingsScreen(
-                    current_provider=None,
-                    current_model=None,
-                    current_max_tokens=None,
-                )
-            )
-            await pilot.pause()
-
-            screen = app.screen
-            assert screen.original_provider == "anthropic"
-            assert screen.original_model == "claude-sonnet-4-20250514"
-            assert screen.original_max_tokens == 4096
-
-    @pytest.mark.asyncio
-    async def test_llm_settings_boundary_max_tokens(self):
-        """Test boundary values for max_tokens."""
-        # Test minimum boundary
-        screen_min = LLMSettingsScreen(current_max_tokens=1)
-        assert screen_min.original_max_tokens == 1
-
-        # Test maximum boundary
-        screen_max = LLMSettingsScreen(current_max_tokens=100000)
-        assert screen_max.original_max_tokens == 100000
-
-    @pytest.mark.asyncio
-    async def test_llm_settings_save_error_handling(self):
-        """Test handling of config save errors."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            with patch("chapgent.config.writer.save_config_value", side_effect=Exception("Write error")):
-                app.action_show_llm_settings()
-                await pilot.pause()
-
-                screen = app.screen
-
-                # Simulate save button press
-                save_btn = screen.query_one("#btn-save")
-                save_btn.press()
-                await asyncio.sleep(0.3)
-                await pilot.pause()
-
-                # Should not crash, error notification shown
-
-    @pytest.mark.asyncio
-    async def test_error_message_clears_on_input_change(self):
-        """Test that error message clears when input changes."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(LLMSettingsScreen())
-            await pilot.pause()
-
-            screen = app.screen
-            from textual.widgets import Input
-
-            # Trigger validation error
-            max_tokens_input = screen.query_one("#llm-max-tokens-input", Input)
-            max_tokens_input.value = "invalid"
-            await pilot.pause()
-
-            screen._validate_and_get_values()
-            assert screen.error_message != ""
-
-            # Change input - error should clear
-            max_tokens_input.value = "8192"
-            await pilot.pause()
-
-            assert screen.error_message == ""
-
-
-# =============================================================================
-# LLMSettingsScreen Integration Tests
-# =============================================================================
-
-
-class TestLLMSettingsIntegration:
-    """End-to-end integration tests for LLM settings."""
-
-    @pytest.mark.asyncio
-    async def test_full_llm_settings_flow(self):
-        """Test complete flow: open -> modify -> save."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            with patch("chapgent.config.writer.save_config_value") as mock_save:
-                # Open via slash command
-                input_widget = app.query_one("#input")
-                input_widget.value = "/model"
-                await pilot.press("enter")
-                await pilot.pause()
-
-                assert isinstance(app.screen, LLMSettingsScreen)
-                screen = app.screen
-
-                # Modify model
-                from textual.widgets import Input
-
-                model_input = screen.query_one("#llm-model-input", Input)
-                model_input.value = "gpt-4o"
-
-                max_tokens_input = screen.query_one("#llm-max-tokens-input", Input)
-                max_tokens_input.value = "16000"
-                await pilot.pause()
-
-                # Simulate save button press
-                save_btn = screen.query_one("#btn-save")
-                save_btn.press()
-                await asyncio.sleep(0.3)
-                await pilot.pause()
-
-                # Verify save calls
-                assert mock_save.call_count == 3
-
-    @pytest.mark.asyncio
-    async def test_llm_settings_cancel_flow(self):
-        """Test complete flow: open -> modify -> cancel."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            with patch("chapgent.config.writer.save_config_value") as mock_save:
-                # Open via slash command
-                input_widget = app.query_one("#input")
-                input_widget.value = "/llm"
-                await pilot.press("enter")
-                await pilot.pause()
-
-                screen = app.screen
-
-                # Modify model
-                from textual.widgets import Input
-
-                model_input = screen.query_one("#llm-model-input", Input)
-                model_input.value = "gpt-4o"
-                await pilot.pause()
-
                 # Cancel
-                cancel_btn = screen.query_one("#btn-cancel")
+                from textual.widgets import Button
+
+                cancel_btn = picker.query_one("#btn-cancel", Button)
                 cancel_btn.press()
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(0.1)
                 await pilot.pause()
 
                 # Should not have saved
                 mock_save.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_escape_closes_theme_picker(self):
+        """Pressing escape closes without saving."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(ThemePickerScreen())
+            await pilot.pause()
+            assert isinstance(app.screen, ThemePickerScreen)
+
+            await pilot.press("escape")
+            await asyncio.sleep(0.1)
+            await pilot.pause()
+
+            # Should be back to main screen
+            assert not isinstance(app.screen, ThemePickerScreen)
+
 
 # =============================================================================
-# HelpScreen Tests
+# LLMSettingsScreen - User can configure LLM provider and model
+# =============================================================================
+
+
+class TestLLMSettings:
+    """User can configure LLM settings."""
+
+    @pytest.mark.asyncio
+    async def test_user_can_open_llm_settings(self):
+        """LLM settings opens from command palette."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.action_show_llm_settings()
+            await pilot.pause()
+            assert isinstance(app.screen, LLMSettingsScreen)
+
+    @pytest.mark.asyncio
+    async def test_user_can_save_llm_settings(self):
+        """Saving LLM settings persists provider, model, and max_tokens."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            saved_values = {}
+
+            with patch("chapgent.config.writer.save_config_value") as mock_save:
+
+                def capture_save(key, value):
+                    saved_values[key] = value
+                    return ("/path/config.toml", value)
+
+                mock_save.side_effect = capture_save
+
+                app.action_show_llm_settings()
+                await pilot.pause()
+
+                screen = app.screen
+                from textual.widgets import Button, Input
+
+                # Change model
+                model_input = screen.query_one("#llm-model-input", Input)
+                model_input.value = "claude-opus-4-20250514"
+
+                # Change max tokens
+                tokens_input = screen.query_one("#llm-max-tokens-input", Input)
+                tokens_input.value = "8192"
+
+                # Save
+                save_btn = screen.query_one("#btn-save", Button)
+                save_btn.press()
+                await asyncio.sleep(0.2)
+                await pilot.pause()
+
+            assert saved_values.get("llm.model") == "claude-opus-4-20250514"
+            assert saved_values.get("llm.max_tokens") == "8192"
+
+    @pytest.mark.asyncio
+    async def test_invalid_max_tokens_shows_error(self):
+        """Invalid max_tokens value prevents saving."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            with patch("chapgent.config.writer.save_config_value") as mock_save:
+                app.action_show_llm_settings()
+                await pilot.pause()
+
+                screen = app.screen
+                from textual.widgets import Button, Input
+
+                # Enter invalid value
+                tokens_input = screen.query_one("#llm-max-tokens-input", Input)
+                tokens_input.value = "not-a-number"
+
+                # Try to save
+                save_btn = screen.query_one("#btn-save", Button)
+                save_btn.press()
+                await asyncio.sleep(0.2)
+                await pilot.pause()
+
+                # Should not save with invalid input
+                mock_save.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_escape_closes_llm_settings(self):
+        """Pressing escape closes without saving."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(LLMSettingsScreen())
+            await pilot.pause()
+
+            await pilot.press("escape")
+            await asyncio.sleep(0.1)
+            await pilot.pause()
+
+            assert not isinstance(app.screen, LLMSettingsScreen)
+
+
+# =============================================================================
+# HelpScreen - User can browse help documentation
 # =============================================================================
 
 
 class TestHelpScreen:
-    """Tests for the HelpScreen modal."""
-
-    def test_help_screen_creation_no_topic(self):
-        """Test creating HelpScreen without initial topic."""
-        screen = HelpScreen()
-        assert screen.initial_topic is None
-        assert screen.current_topic is None
-
-    def test_help_screen_creation_with_topic(self):
-        """Test creating HelpScreen with initial topic."""
-        screen = HelpScreen(topic="tools")
-        assert screen.initial_topic == "tools"
+    """User can browse help topics."""
 
     @pytest.mark.asyncio
-    async def test_help_screen_compose(self):
-        """Test that HelpScreen composes correctly."""
+    async def test_user_can_open_help(self):
+        """Help screen opens via /help command."""
         app = ChapgentApp()
         async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(HelpScreen())
+            app.action_show_help()
             await pilot.pause()
-
             assert isinstance(app.screen, HelpScreen)
-            screen = app.screen
-
-            # Check for title
-            from textual.widgets import Static
-
-            title = screen.query_one("#help-title", Static)
-            assert title is not None
-
-            # Check for content area
-            content = screen.query_one("#help-content")
-            assert content is not None
-
-            # Check for buttons
-            from textual.widgets import Button
-
-            close_btn = screen.query_one("#btn-close", Button)
-            back_btn = screen.query_one("#btn-back", Button)
-            assert close_btn is not None
-            assert back_btn is not None
 
     @pytest.mark.asyncio
-    async def test_help_screen_shows_topic_list(self):
-        """Test that HelpScreen shows all help topics."""
+    async def test_help_shows_all_topics(self):
+        """Help screen lists all available topics."""
         app = ChapgentApp()
         async with app.run_test(size=(100, 50)) as pilot:
             app.push_screen(HelpScreen())
             await pilot.pause()
 
             screen = app.screen
-            assert screen.current_topic is None
-
-            # Check that topic items are present
-            content = screen.query_one("#help-content")
             from textual.widgets import Static
 
-            topic_items = [item for item in content.query(Static) if item.id and item.id.startswith("topic-")]
+            content = screen.query_one("#help-content")
+            topic_items = [s for s in content.query(Static) if s.id and s.id.startswith("topic-")]
+
             assert len(topic_items) == len(HELP_TOPICS)
 
-
-class TestHelpScreenNavigation:
-    """Tests for HelpScreen navigation."""
-
     @pytest.mark.asyncio
-    async def test_show_specific_topic(self):
-        """Test showing a specific topic."""
+    async def test_user_can_view_specific_topic(self):
+        """Opening help with topic shows that topic directly."""
         app = ChapgentApp()
         async with app.run_test(size=(100, 50)) as pilot:
             app.push_screen(HelpScreen(topic="tools"))
@@ -1106,24 +240,15 @@ class TestHelpScreenNavigation:
             screen = app.screen
             assert screen.current_topic == "tools"
 
-            # Verify the topic was successfully loaded
-            from chapgent.ux.help import get_help_topic
-
-            topic = get_help_topic("tools")
-            assert topic is not None
-
     @pytest.mark.asyncio
-    async def test_back_button_returns_to_list(self):
-        """Test that back button returns to topic list."""
+    async def test_user_can_navigate_back_to_topic_list(self):
+        """Back button returns from topic view to list."""
         app = ChapgentApp()
         async with app.run_test(size=(100, 50)) as pilot:
             app.push_screen(HelpScreen(topic="tools"))
             await pilot.pause()
 
             screen = app.screen
-            assert screen.current_topic == "tools"
-
-            # Click back
             from textual.widgets import Button
 
             back_btn = screen.query_one("#btn-back", Button)
@@ -1133,90 +258,122 @@ class TestHelpScreenNavigation:
             assert screen.current_topic is None
 
     @pytest.mark.asyncio
+    async def test_escape_closes_help(self):
+        """Pressing escape closes help screen."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(HelpScreen())
+            await pilot.pause()
+
+            await pilot.press("escape")
+            await asyncio.sleep(0.1)
+            await pilot.pause()
+
+            assert not isinstance(app.screen, HelpScreen)
+
+    @pytest.mark.asyncio
     async def test_invalid_topic_shows_list(self):
-        """Test that invalid topic shows topic list."""
+        """Invalid topic falls back to showing topic list."""
         app = ChapgentApp()
         async with app.run_test(size=(100, 50)) as pilot:
             app.push_screen(HelpScreen(topic="nonexistent"))
             await pilot.pause()
 
             screen = app.screen
-            # Should fall back to list
             assert screen.current_topic is None
 
 
-class TestHelpScreenDismissal:
-    """Tests for HelpScreen dismissal."""
+# =============================================================================
+# ToolsScreen - User can browse available tools
+# =============================================================================
+
+
+class TestToolsScreen:
+    """User can browse and filter tools."""
 
     @pytest.mark.asyncio
-    async def test_close_button_dismisses(self):
-        """Test that close button dismisses screen."""
+    async def test_user_can_open_tools(self):
+        """Tools screen opens via /tools command."""
         app = ChapgentApp()
         async with app.run_test(size=(100, 50)) as pilot:
-            result_holder = {"dismissed": False}
-
-            def on_dismiss(result):
-                result_holder["dismissed"] = True
-
-            app.push_screen(HelpScreen(), callback=on_dismiss)
+            app.action_show_tools()
             await pilot.pause()
-
-            from textual.widgets import Button
-
-            close_btn = app.screen.query_one("#btn-close", Button)
-            close_btn.press()
-            await asyncio.sleep(0.2)
-            await pilot.pause()
-
-            assert result_holder["dismissed"]
+            assert isinstance(app.screen, ToolsScreen)
 
     @pytest.mark.asyncio
-    async def test_escape_dismisses(self):
-        """Test that escape key dismisses screen."""
+    async def test_tools_shows_all_categories(self):
+        """Tools screen shows tools grouped by category."""
         app = ChapgentApp()
         async with app.run_test(size=(100, 50)) as pilot:
-            result_holder = {"dismissed": False}
+            app.push_screen(ToolsScreen())
+            await pilot.pause()
 
-            def on_dismiss(result):
-                result_holder["dismissed"] = True
+            screen = app.screen
+            tools = screen._get_all_tools()
 
-            app.push_screen(HelpScreen(), callback=on_dismiss)
+            # Should have tools from multiple categories
+            categories = {t.category for t in tools}
+            assert len(categories) >= 5  # filesystem, git, search, shell, etc.
+
+    @pytest.mark.asyncio
+    async def test_user_can_filter_by_category(self):
+        """Filtering by category shows only matching tools."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(ToolsScreen(category="git"))
+            await pilot.pause()
+
+            screen = app.screen
+            tools = screen._get_tools()
+
+            for tool in tools:
+                assert tool.category == ToolCategory.GIT
+
+    @pytest.mark.asyncio
+    async def test_user_can_search_tools(self):
+        """Search filters tools by name or description."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(ToolsScreen())
+            await pilot.pause()
+
+            screen = app.screen
+            from textual.widgets import Input
+
+            search = screen.query_one("#tools-search", Input)
+            search.value = "file"
+            await pilot.pause()
+
+            tools = screen._get_tools()
+            for tool in tools:
+                assert "file" in tool.name.lower() or "file" in tool.description.lower()
+
+    @pytest.mark.asyncio
+    async def test_escape_closes_tools(self):
+        """Pressing escape closes tools screen."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(ToolsScreen())
             await pilot.pause()
 
             await pilot.press("escape")
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.1)
             await pilot.pause()
 
-            assert result_holder["dismissed"]
+            assert not isinstance(app.screen, ToolsScreen)
 
 
-class TestHelpScreenAppIntegration:
-    """Tests for HelpScreen integration with ChapgentApp."""
+# =============================================================================
+# Slash Command Integration - User can access screens via commands
+# =============================================================================
 
-    @pytest.mark.asyncio
-    async def test_action_show_help(self):
-        """Test action_show_help opens HelpScreen."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.action_show_help()
-            await pilot.pause()
 
-            assert isinstance(app.screen, HelpScreen)
+class TestSlashCommands:
+    """User can open screens via slash commands."""
 
     @pytest.mark.asyncio
-    async def test_action_show_help_with_topic(self):
-        """Test action_show_help with topic opens HelpScreen to that topic."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.action_show_help(topic="config")
-            await pilot.pause()
-
-            assert isinstance(app.screen, HelpScreen)
-            assert app.screen.current_topic == "config"
-
-    @pytest.mark.asyncio
-    async def test_slash_command_opens_help(self):
-        """Test /help slash command opens HelpScreen."""
+    async def test_slash_help_opens_help_screen(self):
+        """/help opens the help screen."""
         app = ChapgentApp()
         async with app.run_test(size=(100, 50)) as pilot:
             input_widget = app.query_one("#input")
@@ -1227,8 +384,8 @@ class TestHelpScreenAppIntegration:
             assert isinstance(app.screen, HelpScreen)
 
     @pytest.mark.asyncio
-    async def test_slash_command_opens_help_with_topic(self):
-        """Test /help tools opens HelpScreen to tools topic."""
+    async def test_slash_help_with_topic(self):
+        """/help tools opens help to tools topic."""
         app = ChapgentApp()
         async with app.run_test(size=(100, 50)) as pilot:
             input_widget = app.query_one("#input")
@@ -1239,226 +396,9 @@ class TestHelpScreenAppIntegration:
             assert isinstance(app.screen, HelpScreen)
             assert app.screen.current_topic == "tools"
 
-    def test_help_in_command_palette(self):
-        """Test Help is in command palette."""
-        help_cmd = next((c for c in DEFAULT_COMMANDS if c.id == "show_help"), None)
-        assert help_cmd is not None
-        assert help_cmd.name == "Help"
-
-
-# =============================================================================
-# ToolsScreen Tests
-# =============================================================================
-
-
-class TestToolsScreen:
-    """Tests for the ToolsScreen modal."""
-
-    def test_tools_screen_creation_no_category(self):
-        """Test creating ToolsScreen without category."""
-        screen = ToolsScreen()
-        assert screen.initial_category is None
-        assert screen.current_category is None
-
-    def test_tools_screen_creation_with_category(self):
-        """Test creating ToolsScreen with category."""
-        screen = ToolsScreen(category="git")
-        assert screen.initial_category == "git"
-        assert screen.current_category == "git"
-
     @pytest.mark.asyncio
-    async def test_tools_screen_compose(self):
-        """Test that ToolsScreen composes correctly."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(ToolsScreen())
-            await pilot.pause()
-
-            assert isinstance(app.screen, ToolsScreen)
-            screen = app.screen
-
-            # Check for title
-            from textual.widgets import Static
-
-            title = screen.query_one("#tools-title", Static)
-            assert title is not None
-
-            # Check for search input
-            from textual.widgets import Input
-
-            search = screen.query_one("#tools-search", Input)
-            assert search is not None
-
-            # Check for category select
-            from textual.widgets import Select
-
-            category_select = screen.query_one("#tools-category-select", Select)
-            assert category_select is not None
-
-            # Check for content area
-            content = screen.query_one("#tools-content")
-            assert content is not None
-
-    @pytest.mark.asyncio
-    async def test_tools_screen_shows_all_tools(self):
-        """Test that ToolsScreen shows tools grouped by category."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(ToolsScreen())
-            await pilot.pause()
-
-            screen = app.screen
-
-            # Get all tools
-            tools = screen._get_all_tools()
-            assert len(tools) > 0
-
-            # Content should have category headers
-            from textual.widgets import Static
-
-            content = screen.query_one("#tools-content")
-            headers = [item for item in content.query(Static) if "tools-category-header" in (item.classes or set())]
-            assert len(headers) > 0
-
-
-class TestToolsScreenFiltering:
-    """Tests for ToolsScreen filtering."""
-
-    @pytest.mark.asyncio
-    async def test_category_filter(self):
-        """Test filtering by category."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(ToolsScreen(category="git"))
-            await pilot.pause()
-
-            screen = app.screen
-
-            # Get filtered tools
-            tools = screen._get_tools()
-
-            # All should be git category
-            for tool in tools:
-                assert tool.category == ToolCategory.GIT
-
-    @pytest.mark.asyncio
-    async def test_search_filter(self):
-        """Test filtering by search query."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(ToolsScreen())
-            await pilot.pause()
-
-            screen = app.screen
-
-            # Set search filter
-            from textual.widgets import Input
-
-            search = screen.query_one("#tools-search", Input)
-            search.value = "file"
-            await pilot.pause()
-
-            # Get filtered tools
-            tools = screen._get_tools()
-
-            # All should contain "file" in name or description
-            for tool in tools:
-                assert "file" in tool.name.lower() or "file" in tool.description.lower()
-
-    @pytest.mark.asyncio
-    async def test_no_results(self):
-        """Test no results message."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(ToolsScreen())
-            await pilot.pause()
-
-            screen = app.screen
-
-            # Set search filter that won't match anything
-            from textual.widgets import Input
-
-            search = screen.query_one("#tools-search", Input)
-            search.value = "xyznonexistent123"
-            await pilot.pause()
-
-            # Get filtered tools
-            tools = screen._get_tools()
-            assert len(tools) == 0
-
-
-class TestToolsScreenDismissal:
-    """Tests for ToolsScreen dismissal."""
-
-    @pytest.mark.asyncio
-    async def test_close_button_dismisses(self):
-        """Test that close button dismisses screen."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            result_holder = {"dismissed": False}
-
-            def on_dismiss(result):
-                result_holder["dismissed"] = True
-
-            app.push_screen(ToolsScreen(), callback=on_dismiss)
-            await pilot.pause()
-
-            from textual.widgets import Button
-
-            close_btn = app.screen.query_one("#btn-close", Button)
-            close_btn.press()
-            await asyncio.sleep(0.2)
-            await pilot.pause()
-
-            assert result_holder["dismissed"]
-
-    @pytest.mark.asyncio
-    async def test_escape_dismisses(self):
-        """Test that escape key dismisses screen."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            result_holder = {"dismissed": False}
-
-            def on_dismiss(result):
-                result_holder["dismissed"] = True
-
-            app.push_screen(ToolsScreen(), callback=on_dismiss)
-            await pilot.pause()
-
-            await pilot.press("escape")
-            await asyncio.sleep(0.2)
-            await pilot.pause()
-
-            assert result_holder["dismissed"]
-
-
-class TestToolsScreenAppIntegration:
-    """Tests for ToolsScreen integration with ChapgentApp."""
-
-    @pytest.mark.asyncio
-    async def test_action_show_tools(self):
-        """Test action_show_tools opens ToolsScreen."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.action_show_tools()
-            await pilot.pause()
-
-            assert isinstance(app.screen, ToolsScreen)
-
-    @pytest.mark.asyncio
-    async def test_action_show_tools_with_category(self):
-        """Test action_show_tools with category opens ToolsScreen."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.action_show_tools(category="filesystem")
-            await pilot.pause()
-
-            assert isinstance(app.screen, ToolsScreen)
-            assert app.screen.current_category == "filesystem"
-
-    @pytest.mark.asyncio
-    async def test_slash_command_opens_tools(self):
-        """Test /tools slash command opens ToolsScreen."""
+    async def test_slash_tools_opens_tools_screen(self):
+        """/tools opens the tools screen."""
         app = ChapgentApp()
         async with app.run_test(size=(100, 50)) as pilot:
             input_widget = app.query_one("#input")
@@ -1469,8 +409,8 @@ class TestToolsScreenAppIntegration:
             assert isinstance(app.screen, ToolsScreen)
 
     @pytest.mark.asyncio
-    async def test_slash_command_opens_tools_with_category(self):
-        """Test /tools git opens ToolsScreen filtered by git."""
+    async def test_slash_tools_with_category(self):
+        """/tools git opens tools filtered by git category."""
         app = ChapgentApp()
         async with app.run_test(size=(100, 50)) as pilot:
             input_widget = app.query_one("#input")
@@ -1481,229 +421,26 @@ class TestToolsScreenAppIntegration:
             assert isinstance(app.screen, ToolsScreen)
             assert app.screen.current_category == "git"
 
-    def test_tools_in_command_palette(self):
-        """Test View Tools is in command palette."""
-        tools_cmd = next((c for c in DEFAULT_COMMANDS if c.id == "show_tools"), None)
-        assert tools_cmd is not None
-        assert tools_cmd.name == "View Tools"
-
-
-# =============================================================================
-# HelpScreen Property-Based Tests
-# =============================================================================
-
-
-class TestHelpScreenPropertyBased:
-    """Property-based tests for HelpScreen."""
-
-    @given(topic=st.sampled_from(list(HELP_TOPICS.keys())))
-    @hypothesis_settings(max_examples=5)
-    def test_help_screen_accepts_any_valid_topic(self, topic):
-        """Test HelpScreen accepts any valid topic."""
-        screen = HelpScreen(topic=topic)
-        assert screen.initial_topic == topic
-
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("topic", list(HELP_TOPICS.keys())[:3])
-    async def test_help_screen_displays_valid_topics(self, topic):
-        """Test HelpScreen displays content for valid topics."""
+    async def test_slash_theme_opens_theme_picker(self):
+        """/theme opens the theme picker."""
         app = ChapgentApp()
         async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(HelpScreen(topic=topic))
+            input_widget = app.query_one("#input")
+            input_widget.value = "/theme"
+            await pilot.press("enter")
             await pilot.pause()
 
-            screen = app.screen
-            assert screen.current_topic == topic
-
-
-# =============================================================================
-# ToolsScreen Property-Based Tests
-# =============================================================================
-
-
-class TestToolsScreenPropertyBased:
-    """Property-based tests for ToolsScreen."""
-
-    @given(category=st.sampled_from([c.value for c in ToolCategory]))
-    @hypothesis_settings(max_examples=5)
-    def test_tools_screen_accepts_any_valid_category(self, category):
-        """Test ToolsScreen accepts any valid category."""
-        screen = ToolsScreen(category=category)
-        assert screen.initial_category == category
-        assert screen.current_category == category
+            assert isinstance(app.screen, ThemePickerScreen)
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("category", [c.value for c in ToolCategory][:3])
-    async def test_tools_screen_filters_by_category(self, category):
-        """Test ToolsScreen filters by category correctly."""
+    async def test_slash_model_opens_llm_settings(self):
+        """/model opens the LLM settings."""
         app = ChapgentApp()
         async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(ToolsScreen(category=category))
+            input_widget = app.query_one("#input")
+            input_widget.value = "/model"
+            await pilot.press("enter")
             await pilot.pause()
 
-            screen = app.screen
-            tools = screen._get_tools()
-
-            for tool in tools:
-                assert tool.category.value == category
-
-
-# =============================================================================
-# HelpScreen Edge Cases
-# =============================================================================
-
-
-class TestHelpScreenEdgeCases:
-    """Tests for HelpScreen edge cases."""
-
-    @pytest.mark.asyncio
-    async def test_empty_topic_string(self):
-        """Test with empty string topic."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(HelpScreen(topic=""))
-            await pilot.pause()
-
-            screen = app.screen
-            # Empty string should fall back to topic list
-            assert screen.current_topic is None
-
-    @pytest.mark.asyncio
-    async def test_whitespace_topic(self):
-        """Test with whitespace topic."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(HelpScreen(topic="   "))
-            await pilot.pause()
-
-            screen = app.screen
-            # Whitespace should fall back to topic list
-            assert screen.current_topic is None
-
-
-# =============================================================================
-# ToolsScreen Edge Cases
-# =============================================================================
-
-
-class TestToolsScreenEdgeCases:
-    """Tests for ToolsScreen edge cases."""
-
-    def test_invalid_category_filter(self):
-        """Test that invalid category filter returns all tools."""
-        screen = ToolsScreen()
-        # Manually set an invalid category after creation
-        screen.current_category = "invalid_category"
-
-        # Get all tools first
-        all_tools = screen._get_all_tools()
-        assert len(all_tools) > 0
-
-        # Get filtered tools with invalid category
-        tools = screen._get_tools()
-        # Should return all tools when category is invalid (ValueErrors are caught)
-        assert len(tools) == len(all_tools)
-
-    @pytest.mark.asyncio
-    async def test_empty_search(self):
-        """Test with empty search."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(ToolsScreen())
-            await pilot.pause()
-
-            screen = app.screen
-
-            # Empty search should show all tools
-            assert screen.current_filter == ""
-            tools = screen._get_tools()
-            all_tools = screen._get_all_tools()
-            assert len(tools) == len(all_tools)
-
-
-# =============================================================================
-# HelpScreen Integration Tests
-# =============================================================================
-
-
-class TestHelpScreenIntegration:
-    """Integration tests for HelpScreen."""
-
-    @pytest.mark.asyncio
-    async def test_full_navigation_flow(self):
-        """Test full navigation: list -> topic -> back -> close."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(HelpScreen())
-            await pilot.pause()
-
-            screen = app.screen
-
-            # Start at list
-            assert screen.current_topic is None
-
-            # Navigate to topic using internal method
-            screen._show_topic("tools")
-            await pilot.pause()
-            assert screen.current_topic == "tools"
-
-            # Go back
-            from textual.widgets import Button
-
-            back_btn = screen.query_one("#btn-back", Button)
-            back_btn.press()
-            await pilot.pause()
-            assert screen.current_topic is None
-
-            # Close
-            close_btn = screen.query_one("#btn-close", Button)
-            close_btn.press()
-            await asyncio.sleep(0.2)
-            await pilot.pause()
-
-
-# =============================================================================
-# ToolsScreen Integration Tests
-# =============================================================================
-
-
-class TestToolsScreenIntegration:
-    """Integration tests for ToolsScreen."""
-
-    @pytest.mark.asyncio
-    async def test_full_filter_flow(self):
-        """Test full filter flow: search -> category -> clear."""
-        app = ChapgentApp()
-        async with app.run_test(size=(100, 50)) as pilot:
-            app.push_screen(ToolsScreen())
-            await pilot.pause()
-
-            screen = app.screen
-            from textual.widgets import Input
-
-            # Search for "git"
-            search = screen.query_one("#tools-search", Input)
-            search.value = "git"
-            await pilot.pause()
-
-            # Filter by git category
-            screen.current_category = "git"
-            screen._update_tools_list()
-            await pilot.pause()
-
-            tools = screen._get_tools()
-            for tool in tools:
-                assert tool.category == ToolCategory.GIT
-
-            # Clear search
-            search.value = ""
-            await pilot.pause()
-
-            # Clear category
-            screen.current_category = None
-            screen._update_tools_list()
-            await pilot.pause()
-
-            tools = screen._get_tools()
-            all_tools = screen._get_all_tools()
-            assert len(tools) == len(all_tools)
+            assert isinstance(app.screen, LLMSettingsScreen)

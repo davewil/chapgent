@@ -2,8 +2,21 @@ study specs/README.md
 study specs/phase-1-mvp.md and pick the most important thing to do
 
 IMPORTANT:
-- author property based tests or unit tests (whichever is best)
+- author predominataly behavioural tests, property based tests where fuzzing is needed, or unit tests where needed  (whichever is best)
 - after making changes to the files run the tests
-- update the plan when the task is done
+- update the specs/phase-1-mvp.md when the task is done
 - append to progress.txt what you have learned
 - when tests pass, commit and push to gh
+
+
+
+study specs/README.md
+  study specs/progress.txt
+  study the other specs  (the plan) and pick the most important thing to do
+
+  IMPORTANT:
+  - author predominataly behavioural tests, property based tests where fuzzing is needed, or unit tests where needed  (whichever is best), following new test patterns
+  - after making changes to the files run the tests
+  - update the specs document you decided to work on  when the task is done
+  - append to progress.txt what you have learned
+  - when tests pass, commit and push to gh
