@@ -80,7 +80,7 @@ class TestPygmentsHighlighter:
     def test_highlight_go(self):
         """Test highlighting Go code."""
         highlighter = PygmentsHighlighter()
-        result = highlighter.highlight('package main\nfunc main() {}', "go")
+        result = highlighter.highlight("package main\nfunc main() {}", "go")
 
         assert result.language == "go"
         assert result.line_count == 2

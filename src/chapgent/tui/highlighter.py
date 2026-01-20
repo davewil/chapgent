@@ -248,8 +248,7 @@ class TreeSitterHighlighter(SyntaxHighlighter):
             NotImplementedError: Always, as tree-sitter support is planned for future.
         """
         raise NotImplementedError(
-            "TreeSitterHighlighter is planned for future implementation. "
-            "Use PygmentsHighlighter for now."
+            "TreeSitterHighlighter is planned for future implementation. Use PygmentsHighlighter for now."
         )
 
     def highlight(
