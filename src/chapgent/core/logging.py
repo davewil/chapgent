@@ -47,8 +47,8 @@ def setup_logging(
 ) -> Path:
     """Configure logging to file with rotation.
 
-    Removes the default stderr handler (which would corrupt TUI) and adds
-    a file handler with rotation, retention, and compression.
+    Removes any existing handlers and adds a file handler with the specified
+    level, rotation, retention, and compression.
 
     Args:
         level: Minimum log level (DEBUG, INFO, WARNING, ERROR).
@@ -80,12 +80,11 @@ def setup_logging(
     # Create log directory if needed
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Remove default stderr handler (would corrupt TUI)
-    # Only do this once to avoid removing handlers multiple times
-    if not _logging_initialized:
-        logger.remove()
+    # Always remove all handlers to ensure clean state with correct level
+    # This handles both first initialization and reconfiguration
+    logger.remove()
 
-    # Add file handler
+    # Add file handler with specified level
     logger.add(
         log_path,
         level=level_upper,

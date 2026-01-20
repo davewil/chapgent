@@ -166,12 +166,18 @@ async def conversation_loop(
             if tool_def:
                 tool_list.append(tool_def)
 
-        # Debug: log context size
+        # Log context size (INFO level so it's always visible for debugging)
         total_chars = sum(len(json.dumps(m)) for m in llm_msgs)
-        logger.debug(f"LLM request: {len(llm_msgs)} messages, ~{total_chars} chars, ~{total_chars // 4} tokens")
+        estimated_tokens = total_chars // 4
+        logger.info(
+            f"LLM request iteration {iteration}: {len(llm_msgs)} messages, "
+            f"~{total_chars:,} chars, ~{estimated_tokens:,} tokens"
+        )
+        # Log individual message sizes for debugging context growth
         for i, msg in enumerate(llm_msgs):
             msg_chars = len(json.dumps(msg))
-            logger.debug(f"  Message {i}: role={msg.get('role')}, ~{msg_chars} chars")
+            role = msg.get("role", "unknown")
+            logger.debug(f"  Message {i}: role={role}, ~{msg_chars:,} chars")
 
         # Call LLM with error handling
         try:
