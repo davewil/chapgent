@@ -124,7 +124,7 @@ class TestConversationPanelStreaming:
     async def test_finalize_streaming_message_marks_complete(self):
         """finalize_streaming_message should mark the message as finalized."""
         app = ChapgentApp()
-        async with app.run_test() as pilot:
+        async with app.run_test():
             panel = app.query_one(ConversationPanel)
             panel.append_streaming_message()
             panel.update_streaming_message("Final content")

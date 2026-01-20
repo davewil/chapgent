@@ -451,4 +451,5 @@ class TestIntegration:
 
         # Defaults for unset
         assert settings.llm.provider == LLMSettings.model_fields["provider"].default
-        assert settings.permissions.auto_approve_low_risk == PermissionSettings.model_fields["auto_approve_low_risk"].default
+        expected = PermissionSettings.model_fields["auto_approve_low_risk"].default
+        assert settings.permissions.auto_approve_low_risk == expected

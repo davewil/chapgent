@@ -2,8 +2,8 @@ import pytest
 from textual.widgets import Footer, Header
 
 from chapgent.tui.app import ChapgentApp
-from tests.test_tui.conftest import get_binding
 from chapgent.tui.widgets import ConversationPanel, MessageInput, SessionsSidebar, ToolPanel
+from tests.test_tui.conftest import get_binding
 
 
 @pytest.mark.asyncio

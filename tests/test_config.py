@@ -9,7 +9,8 @@ from chapgent.config.settings import LLMSettings, PermissionSettings, Settings, 
 def test_default_settings():
     settings = Settings()
     assert settings.llm.provider == LLMSettings.model_fields["provider"].default
-    assert settings.permissions.auto_approve_low_risk == PermissionSettings.model_fields["auto_approve_low_risk"].default
+    expected_auto_approve = PermissionSettings.model_fields["auto_approve_low_risk"].default
+    assert settings.permissions.auto_approve_low_risk == expected_auto_approve
     assert settings.tui.theme == TUISettings.model_fields["theme"].default
 
 
@@ -73,4 +74,5 @@ async def test_load_project_config_overrides_user(tmp_path):
     assert settings.permissions.session_override_allowed is False
 
     # Check default remaining untouched
-    assert settings.permissions.auto_approve_low_risk == PermissionSettings.model_fields["auto_approve_low_risk"].default
+    expected_auto_approve = PermissionSettings.model_fields["auto_approve_low_risk"].default
+    assert settings.permissions.auto_approve_low_risk == expected_auto_approve

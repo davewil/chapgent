@@ -223,7 +223,8 @@ class TestSettingsValidation:
         # Verify defaults match the field defaults from settings classes
         assert settings.llm.provider == LLMSettings.model_fields["provider"].default
         assert settings.tui.theme == TUISettings.model_fields["theme"].default
-        assert settings.permissions.auto_approve_low_risk == PermissionSettings.model_fields["auto_approve_low_risk"].default
+        expected = PermissionSettings.model_fields["auto_approve_low_risk"].default
+        assert settings.permissions.auto_approve_low_risk == expected
 
     def test_valid_config_dict(self):
         """Should accept valid config dict."""

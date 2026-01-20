@@ -4,7 +4,6 @@ These tests focus on behavioral validation of the markdown renderer and message
 widget, ensuring correct rendering of markdown content with syntax highlighting.
 """
 
-import pytest
 from hypothesis import given
 from hypothesis import settings as hypothesis_settings
 from hypothesis import strategies as st
@@ -16,7 +15,6 @@ from chapgent.tui.markdown import (
     MarkdownMessage,
     MarkdownRenderer,
 )
-
 
 # =============================================================================
 # MarkdownConfig Tests

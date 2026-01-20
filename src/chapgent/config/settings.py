@@ -149,7 +149,8 @@ class LLMSettings(BaseModel):
             raise ValueError(f"max_tokens must be at least {MAX_TOKENS_MIN}")
         if v > MAX_TOKENS_MAX:
             raise ValueError(
-                f"max_tokens value {v} exceeds maximum of {MAX_TOKENS_MAX}. Most models support at most 4096-32000 tokens."
+                f"max_tokens value {v} exceeds maximum of {MAX_TOKENS_MAX}. "
+                "Most models support at most 4096-32000 tokens."
             )
         return v
 

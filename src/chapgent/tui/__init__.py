@@ -1,6 +1,15 @@
 """TUI module for Chapgent."""
 
 from chapgent.tui.app import ChapgentApp
+from chapgent.tui.commands import (
+    SLASH_COMMANDS,
+    SlashCommand,
+    format_command_list,
+    get_command_help,
+    get_slash_command,
+    list_slash_commands,
+    parse_slash_command,
+)
 from chapgent.tui.highlighter import (
     HighlightedCode,
     PygmentsHighlighter,
@@ -11,15 +20,6 @@ from chapgent.tui.markdown import (
     MarkdownConfig,
     MarkdownMessage,
     MarkdownRenderer,
-)
-from chapgent.tui.commands import (
-    SLASH_COMMANDS,
-    SlashCommand,
-    format_command_list,
-    get_command_help,
-    get_slash_command,
-    list_slash_commands,
-    parse_slash_command,
 )
 from chapgent.tui.screens import (
     HelpScreen,

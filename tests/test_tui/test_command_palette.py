@@ -14,7 +14,6 @@ from chapgent.core.providers import LLMProvider, LLMResponse
 from chapgent.session.models import Session
 from chapgent.tools.registry import ToolRegistry
 from chapgent.tui.app import ChapgentApp
-from tests.test_tui.conftest import get_binding
 from chapgent.tui.widgets import (
     DEFAULT_COMMANDS,
     CommandPalette,
@@ -22,6 +21,7 @@ from chapgent.tui.widgets import (
     PaletteCommand,
     _fuzzy_match,
 )
+from tests.test_tui.conftest import get_binding
 
 # =============================================================================
 # PaletteCommand Tests
