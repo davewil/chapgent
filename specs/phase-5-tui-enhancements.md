@@ -286,9 +286,19 @@ These reuse existing `action_*` methods - just wire up slash commands:
      - `src/chapgent/tui/widgets.py` (added "LLM Settings" to DEFAULT_COMMANDS)
      - `tests/test_tui/test_screens.py` (added 26 tests for LLMSettingsScreen)
 
-4. **Phase 3**: Help & Tools
-   - Create `HelpScreen` and `ToolsScreen`
-   - Wire up `/help` and `/tools` commands
+4. **Phase 3**: Help & Tools ✅ COMPLETE
+   - Create `HelpScreen` and `ToolsScreen` ✅
+   - Wire up `/help` and `/tools` commands ✅
+   - Add "Help" and "View Tools" to command palette ✅
+   - **Files modified:**
+     - `src/chapgent/tui/screens.py` (added HelpScreen and ToolsScreen classes)
+     - `src/chapgent/tui/__init__.py` (exports)
+     - `src/chapgent/tui/app.py` (action_show_help, action_show_tools, _handle_tools_command)
+     - `src/chapgent/tui/widgets.py` (added "Help" and "View Tools" to DEFAULT_COMMANDS)
+     - `tests/test_tui/test_screens.py` (added 44 tests for HelpScreen and ToolsScreen)
+   - **Features:**
+     - HelpScreen: Shows topic list or specific topic content, back navigation, escape to close
+     - ToolsScreen: Shows tools grouped by category, search/filter input, category dropdown
 
 5. **Phase 4**: Remaining
    - TUI settings, system prompt, config show

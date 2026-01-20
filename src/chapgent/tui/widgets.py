@@ -146,6 +146,16 @@ DEFAULT_COMMANDS: list[PaletteCommand] = [
         description="Configure LLM provider, model, and max tokens",
     ),
     PaletteCommand(
+        id="show_help",
+        name="Help",
+        description="Show help topics and documentation",
+    ),
+    PaletteCommand(
+        id="show_tools",
+        name="View Tools",
+        description="View available tools by category",
+    ),
+    PaletteCommand(
         id="quit",
         name="Quit",
         description="Exit the application",

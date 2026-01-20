@@ -9,8 +9,8 @@ from chapgent.config.settings import Settings
 from chapgent.core.agent import Agent
 from chapgent.session.models import Session
 from chapgent.session.storage import SessionStorage
-from chapgent.tui.commands import format_command_list, get_command_help, parse_slash_command
-from chapgent.tui.screens import LLMSettingsScreen, ThemePickerScreen
+from chapgent.tui.commands import parse_slash_command
+from chapgent.tui.screens import HelpScreen, LLMSettingsScreen, ThemePickerScreen, ToolsScreen
 from chapgent.tui.widgets import (
     CommandPalette,
     ConversationPanel,
@@ -312,6 +312,22 @@ class ChapgentApp(App[None]):
             callback=handle_llm_settings,
         )
 
+    def action_show_help(self, topic: str | None = None) -> None:
+        """Show the help screen modal.
+
+        Args:
+            topic: Optional topic to display directly.
+        """
+        self.push_screen(HelpScreen(topic=topic))
+
+    def action_show_tools(self, category: str | None = None) -> None:
+        """Show the tools screen modal.
+
+        Args:
+            category: Optional category to filter by.
+        """
+        self.push_screen(ToolsScreen(category=category))
+
     async def _populate_sessions_sidebar(self) -> None:
         """Populate the sessions sidebar with saved sessions."""
         if not self.storage or not self.settings.tui.show_sidebar:
@@ -357,6 +373,10 @@ class ChapgentApp(App[None]):
             await self._handle_help_command(args)
             return
 
+        if command.name == "tools":
+            await self._handle_tools_command(args)
+            return
+
         if command.name == "config":
             await self._handle_config_command(args)
             return
@@ -381,22 +401,17 @@ class ChapgentApp(App[None]):
         Args:
             args: Command arguments (optional topic name).
         """
-        if not args:
-            # Show list of all commands
-            help_text = format_command_list()
-            self.query_one(ConversationPanel).append_assistant_message(help_text)
-            return
+        topic = args[0] if args else None
+        self.action_show_help(topic=topic)
 
-        # Show help for a specific command
-        topic = args[0]
-        topic_help = get_command_help(topic)
+    async def _handle_tools_command(self, args: list[str]) -> None:
+        """Handle the /tools command.
 
-        if topic_help is None:
-            self.notify(f"Unknown help topic: {topic}", severity="warning")
-            self.notify("Type /help for available commands.", severity="information")
-            return
-
-        self.query_one(ConversationPanel).append_assistant_message(topic_help)
+        Args:
+            args: Command arguments (optional category name).
+        """
+        category = args[0] if args else None
+        self.action_show_tools(category=category)
 
     async def _handle_config_command(self, args: list[str]) -> None:
         """Handle the /config command.

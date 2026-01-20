@@ -11,8 +11,10 @@ from chapgent.tui.commands import (
     parse_slash_command,
 )
 from chapgent.tui.screens import (
+    HelpScreen,
     LLMSettingsScreen,
     ThemePickerScreen,
+    ToolsScreen,
 )
 from chapgent.tui.widgets import (
     CommandPalette,
@@ -41,8 +43,10 @@ __all__ = [
     "list_slash_commands",
     "parse_slash_command",
     # Screens
+    "HelpScreen",
     "LLMSettingsScreen",
     "ThemePickerScreen",
+    "ToolsScreen",
     # Widgets
     "CommandPalette",
     "CommandPaletteItem",

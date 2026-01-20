@@ -9,9 +9,11 @@ from hypothesis import settings as hypothesis_settings
 from hypothesis import strategies as st
 
 from chapgent.config.settings import VALID_PROVIDERS, VALID_THEMES
+from chapgent.tools.base import ToolCategory
 from chapgent.tui.app import ChapgentApp
-from chapgent.tui.screens import LLMSettingsScreen, ThemePickerScreen
+from chapgent.tui.screens import HelpScreen, LLMSettingsScreen, ThemePickerScreen, ToolsScreen
 from chapgent.tui.widgets import DEFAULT_COMMANDS
+from chapgent.ux.help import HELP_TOPICS
 
 # =============================================================================
 # ThemePickerScreen Tests
@@ -1021,3 +1023,687 @@ class TestLLMSettingsIntegration:
 
                 # Should not have saved
                 mock_save.assert_not_called()
+
+
+# =============================================================================
+# HelpScreen Tests
+# =============================================================================
+
+
+class TestHelpScreen:
+    """Tests for the HelpScreen modal."""
+
+    def test_help_screen_creation_no_topic(self):
+        """Test creating HelpScreen without initial topic."""
+        screen = HelpScreen()
+        assert screen.initial_topic is None
+        assert screen.current_topic is None
+
+    def test_help_screen_creation_with_topic(self):
+        """Test creating HelpScreen with initial topic."""
+        screen = HelpScreen(topic="tools")
+        assert screen.initial_topic == "tools"
+
+    @pytest.mark.asyncio
+    async def test_help_screen_compose(self):
+        """Test that HelpScreen composes correctly."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(HelpScreen())
+            await pilot.pause()
+
+            assert isinstance(app.screen, HelpScreen)
+            screen = app.screen
+
+            # Check for title
+            from textual.widgets import Static
+
+            title = screen.query_one("#help-title", Static)
+            assert title is not None
+
+            # Check for content area
+            content = screen.query_one("#help-content")
+            assert content is not None
+
+            # Check for buttons
+            from textual.widgets import Button
+
+            close_btn = screen.query_one("#btn-close", Button)
+            back_btn = screen.query_one("#btn-back", Button)
+            assert close_btn is not None
+            assert back_btn is not None
+
+    @pytest.mark.asyncio
+    async def test_help_screen_shows_topic_list(self):
+        """Test that HelpScreen shows all help topics."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(HelpScreen())
+            await pilot.pause()
+
+            screen = app.screen
+            assert screen.current_topic is None
+
+            # Check that topic items are present
+            content = screen.query_one("#help-content")
+            from textual.widgets import Static
+
+            topic_items = [item for item in content.query(Static) if item.id and item.id.startswith("topic-")]
+            assert len(topic_items) == len(HELP_TOPICS)
+
+
+class TestHelpScreenNavigation:
+    """Tests for HelpScreen navigation."""
+
+    @pytest.mark.asyncio
+    async def test_show_specific_topic(self):
+        """Test showing a specific topic."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(HelpScreen(topic="tools"))
+            await pilot.pause()
+
+            screen = app.screen
+            assert screen.current_topic == "tools"
+
+            # Verify the topic was successfully loaded
+            from chapgent.ux.help import get_help_topic
+
+            topic = get_help_topic("tools")
+            assert topic is not None
+
+    @pytest.mark.asyncio
+    async def test_back_button_returns_to_list(self):
+        """Test that back button returns to topic list."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(HelpScreen(topic="tools"))
+            await pilot.pause()
+
+            screen = app.screen
+            assert screen.current_topic == "tools"
+
+            # Click back
+            from textual.widgets import Button
+
+            back_btn = screen.query_one("#btn-back", Button)
+            back_btn.press()
+            await pilot.pause()
+
+            assert screen.current_topic is None
+
+    @pytest.mark.asyncio
+    async def test_invalid_topic_shows_list(self):
+        """Test that invalid topic shows topic list."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(HelpScreen(topic="nonexistent"))
+            await pilot.pause()
+
+            screen = app.screen
+            # Should fall back to list
+            assert screen.current_topic is None
+
+
+class TestHelpScreenDismissal:
+    """Tests for HelpScreen dismissal."""
+
+    @pytest.mark.asyncio
+    async def test_close_button_dismisses(self):
+        """Test that close button dismisses screen."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            result_holder = {"dismissed": False}
+
+            def on_dismiss(result):
+                result_holder["dismissed"] = True
+
+            app.push_screen(HelpScreen(), callback=on_dismiss)
+            await pilot.pause()
+
+            from textual.widgets import Button
+
+            close_btn = app.screen.query_one("#btn-close", Button)
+            close_btn.press()
+            await asyncio.sleep(0.2)
+            await pilot.pause()
+
+            assert result_holder["dismissed"]
+
+    @pytest.mark.asyncio
+    async def test_escape_dismisses(self):
+        """Test that escape key dismisses screen."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            result_holder = {"dismissed": False}
+
+            def on_dismiss(result):
+                result_holder["dismissed"] = True
+
+            app.push_screen(HelpScreen(), callback=on_dismiss)
+            await pilot.pause()
+
+            await pilot.press("escape")
+            await asyncio.sleep(0.2)
+            await pilot.pause()
+
+            assert result_holder["dismissed"]
+
+
+class TestHelpScreenAppIntegration:
+    """Tests for HelpScreen integration with ChapgentApp."""
+
+    @pytest.mark.asyncio
+    async def test_action_show_help(self):
+        """Test action_show_help opens HelpScreen."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.action_show_help()
+            await pilot.pause()
+
+            assert isinstance(app.screen, HelpScreen)
+
+    @pytest.mark.asyncio
+    async def test_action_show_help_with_topic(self):
+        """Test action_show_help with topic opens HelpScreen to that topic."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.action_show_help(topic="config")
+            await pilot.pause()
+
+            assert isinstance(app.screen, HelpScreen)
+            assert app.screen.current_topic == "config"
+
+    @pytest.mark.asyncio
+    async def test_slash_command_opens_help(self):
+        """Test /help slash command opens HelpScreen."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            input_widget = app.query_one("#input")
+            input_widget.value = "/help"
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert isinstance(app.screen, HelpScreen)
+
+    @pytest.mark.asyncio
+    async def test_slash_command_opens_help_with_topic(self):
+        """Test /help tools opens HelpScreen to tools topic."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            input_widget = app.query_one("#input")
+            input_widget.value = "/help tools"
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert isinstance(app.screen, HelpScreen)
+            assert app.screen.current_topic == "tools"
+
+    def test_help_in_command_palette(self):
+        """Test Help is in command palette."""
+        help_cmd = next((c for c in DEFAULT_COMMANDS if c.id == "show_help"), None)
+        assert help_cmd is not None
+        assert help_cmd.name == "Help"
+
+
+# =============================================================================
+# ToolsScreen Tests
+# =============================================================================
+
+
+class TestToolsScreen:
+    """Tests for the ToolsScreen modal."""
+
+    def test_tools_screen_creation_no_category(self):
+        """Test creating ToolsScreen without category."""
+        screen = ToolsScreen()
+        assert screen.initial_category is None
+        assert screen.current_category is None
+
+    def test_tools_screen_creation_with_category(self):
+        """Test creating ToolsScreen with category."""
+        screen = ToolsScreen(category="git")
+        assert screen.initial_category == "git"
+        assert screen.current_category == "git"
+
+    @pytest.mark.asyncio
+    async def test_tools_screen_compose(self):
+        """Test that ToolsScreen composes correctly."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(ToolsScreen())
+            await pilot.pause()
+
+            assert isinstance(app.screen, ToolsScreen)
+            screen = app.screen
+
+            # Check for title
+            from textual.widgets import Static
+
+            title = screen.query_one("#tools-title", Static)
+            assert title is not None
+
+            # Check for search input
+            from textual.widgets import Input
+
+            search = screen.query_one("#tools-search", Input)
+            assert search is not None
+
+            # Check for category select
+            from textual.widgets import Select
+
+            category_select = screen.query_one("#tools-category-select", Select)
+            assert category_select is not None
+
+            # Check for content area
+            content = screen.query_one("#tools-content")
+            assert content is not None
+
+    @pytest.mark.asyncio
+    async def test_tools_screen_shows_all_tools(self):
+        """Test that ToolsScreen shows tools grouped by category."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(ToolsScreen())
+            await pilot.pause()
+
+            screen = app.screen
+
+            # Get all tools
+            tools = screen._get_all_tools()
+            assert len(tools) > 0
+
+            # Content should have category headers
+            from textual.widgets import Static
+
+            content = screen.query_one("#tools-content")
+            headers = [item for item in content.query(Static) if "tools-category-header" in (item.classes or set())]
+            assert len(headers) > 0
+
+
+class TestToolsScreenFiltering:
+    """Tests for ToolsScreen filtering."""
+
+    @pytest.mark.asyncio
+    async def test_category_filter(self):
+        """Test filtering by category."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(ToolsScreen(category="git"))
+            await pilot.pause()
+
+            screen = app.screen
+
+            # Get filtered tools
+            tools = screen._get_tools()
+
+            # All should be git category
+            for tool in tools:
+                assert tool.category == ToolCategory.GIT
+
+    @pytest.mark.asyncio
+    async def test_search_filter(self):
+        """Test filtering by search query."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(ToolsScreen())
+            await pilot.pause()
+
+            screen = app.screen
+
+            # Set search filter
+            from textual.widgets import Input
+
+            search = screen.query_one("#tools-search", Input)
+            search.value = "file"
+            await pilot.pause()
+
+            # Get filtered tools
+            tools = screen._get_tools()
+
+            # All should contain "file" in name or description
+            for tool in tools:
+                assert "file" in tool.name.lower() or "file" in tool.description.lower()
+
+    @pytest.mark.asyncio
+    async def test_no_results(self):
+        """Test no results message."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(ToolsScreen())
+            await pilot.pause()
+
+            screen = app.screen
+
+            # Set search filter that won't match anything
+            from textual.widgets import Input
+
+            search = screen.query_one("#tools-search", Input)
+            search.value = "xyznonexistent123"
+            await pilot.pause()
+
+            # Get filtered tools
+            tools = screen._get_tools()
+            assert len(tools) == 0
+
+
+class TestToolsScreenDismissal:
+    """Tests for ToolsScreen dismissal."""
+
+    @pytest.mark.asyncio
+    async def test_close_button_dismisses(self):
+        """Test that close button dismisses screen."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            result_holder = {"dismissed": False}
+
+            def on_dismiss(result):
+                result_holder["dismissed"] = True
+
+            app.push_screen(ToolsScreen(), callback=on_dismiss)
+            await pilot.pause()
+
+            from textual.widgets import Button
+
+            close_btn = app.screen.query_one("#btn-close", Button)
+            close_btn.press()
+            await asyncio.sleep(0.2)
+            await pilot.pause()
+
+            assert result_holder["dismissed"]
+
+    @pytest.mark.asyncio
+    async def test_escape_dismisses(self):
+        """Test that escape key dismisses screen."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            result_holder = {"dismissed": False}
+
+            def on_dismiss(result):
+                result_holder["dismissed"] = True
+
+            app.push_screen(ToolsScreen(), callback=on_dismiss)
+            await pilot.pause()
+
+            await pilot.press("escape")
+            await asyncio.sleep(0.2)
+            await pilot.pause()
+
+            assert result_holder["dismissed"]
+
+
+class TestToolsScreenAppIntegration:
+    """Tests for ToolsScreen integration with ChapgentApp."""
+
+    @pytest.mark.asyncio
+    async def test_action_show_tools(self):
+        """Test action_show_tools opens ToolsScreen."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.action_show_tools()
+            await pilot.pause()
+
+            assert isinstance(app.screen, ToolsScreen)
+
+    @pytest.mark.asyncio
+    async def test_action_show_tools_with_category(self):
+        """Test action_show_tools with category opens ToolsScreen."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.action_show_tools(category="filesystem")
+            await pilot.pause()
+
+            assert isinstance(app.screen, ToolsScreen)
+            assert app.screen.current_category == "filesystem"
+
+    @pytest.mark.asyncio
+    async def test_slash_command_opens_tools(self):
+        """Test /tools slash command opens ToolsScreen."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            input_widget = app.query_one("#input")
+            input_widget.value = "/tools"
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert isinstance(app.screen, ToolsScreen)
+
+    @pytest.mark.asyncio
+    async def test_slash_command_opens_tools_with_category(self):
+        """Test /tools git opens ToolsScreen filtered by git."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            input_widget = app.query_one("#input")
+            input_widget.value = "/tools git"
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert isinstance(app.screen, ToolsScreen)
+            assert app.screen.current_category == "git"
+
+    def test_tools_in_command_palette(self):
+        """Test View Tools is in command palette."""
+        tools_cmd = next((c for c in DEFAULT_COMMANDS if c.id == "show_tools"), None)
+        assert tools_cmd is not None
+        assert tools_cmd.name == "View Tools"
+
+
+# =============================================================================
+# HelpScreen Property-Based Tests
+# =============================================================================
+
+
+class TestHelpScreenPropertyBased:
+    """Property-based tests for HelpScreen."""
+
+    @given(topic=st.sampled_from(list(HELP_TOPICS.keys())))
+    @hypothesis_settings(max_examples=5)
+    def test_help_screen_accepts_any_valid_topic(self, topic):
+        """Test HelpScreen accepts any valid topic."""
+        screen = HelpScreen(topic=topic)
+        assert screen.initial_topic == topic
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("topic", list(HELP_TOPICS.keys())[:3])
+    async def test_help_screen_displays_valid_topics(self, topic):
+        """Test HelpScreen displays content for valid topics."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(HelpScreen(topic=topic))
+            await pilot.pause()
+
+            screen = app.screen
+            assert screen.current_topic == topic
+
+
+# =============================================================================
+# ToolsScreen Property-Based Tests
+# =============================================================================
+
+
+class TestToolsScreenPropertyBased:
+    """Property-based tests for ToolsScreen."""
+
+    @given(category=st.sampled_from([c.value for c in ToolCategory]))
+    @hypothesis_settings(max_examples=5)
+    def test_tools_screen_accepts_any_valid_category(self, category):
+        """Test ToolsScreen accepts any valid category."""
+        screen = ToolsScreen(category=category)
+        assert screen.initial_category == category
+        assert screen.current_category == category
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("category", [c.value for c in ToolCategory][:3])
+    async def test_tools_screen_filters_by_category(self, category):
+        """Test ToolsScreen filters by category correctly."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(ToolsScreen(category=category))
+            await pilot.pause()
+
+            screen = app.screen
+            tools = screen._get_tools()
+
+            for tool in tools:
+                assert tool.category.value == category
+
+
+# =============================================================================
+# HelpScreen Edge Cases
+# =============================================================================
+
+
+class TestHelpScreenEdgeCases:
+    """Tests for HelpScreen edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_empty_topic_string(self):
+        """Test with empty string topic."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(HelpScreen(topic=""))
+            await pilot.pause()
+
+            screen = app.screen
+            # Empty string should fall back to topic list
+            assert screen.current_topic is None
+
+    @pytest.mark.asyncio
+    async def test_whitespace_topic(self):
+        """Test with whitespace topic."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(HelpScreen(topic="   "))
+            await pilot.pause()
+
+            screen = app.screen
+            # Whitespace should fall back to topic list
+            assert screen.current_topic is None
+
+
+# =============================================================================
+# ToolsScreen Edge Cases
+# =============================================================================
+
+
+class TestToolsScreenEdgeCases:
+    """Tests for ToolsScreen edge cases."""
+
+    def test_invalid_category_filter(self):
+        """Test that invalid category filter returns all tools."""
+        screen = ToolsScreen()
+        # Manually set an invalid category after creation
+        screen.current_category = "invalid_category"
+
+        # Get all tools first
+        all_tools = screen._get_all_tools()
+        assert len(all_tools) > 0
+
+        # Get filtered tools with invalid category
+        tools = screen._get_tools()
+        # Should return all tools when category is invalid (ValueErrors are caught)
+        assert len(tools) == len(all_tools)
+
+    @pytest.mark.asyncio
+    async def test_empty_search(self):
+        """Test with empty search."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(ToolsScreen())
+            await pilot.pause()
+
+            screen = app.screen
+
+            # Empty search should show all tools
+            assert screen.current_filter == ""
+            tools = screen._get_tools()
+            all_tools = screen._get_all_tools()
+            assert len(tools) == len(all_tools)
+
+
+# =============================================================================
+# HelpScreen Integration Tests
+# =============================================================================
+
+
+class TestHelpScreenIntegration:
+    """Integration tests for HelpScreen."""
+
+    @pytest.mark.asyncio
+    async def test_full_navigation_flow(self):
+        """Test full navigation: list -> topic -> back -> close."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(HelpScreen())
+            await pilot.pause()
+
+            screen = app.screen
+
+            # Start at list
+            assert screen.current_topic is None
+
+            # Navigate to topic using internal method
+            screen._show_topic("tools")
+            await pilot.pause()
+            assert screen.current_topic == "tools"
+
+            # Go back
+            from textual.widgets import Button
+
+            back_btn = screen.query_one("#btn-back", Button)
+            back_btn.press()
+            await pilot.pause()
+            assert screen.current_topic is None
+
+            # Close
+            close_btn = screen.query_one("#btn-close", Button)
+            close_btn.press()
+            await asyncio.sleep(0.2)
+            await pilot.pause()
+
+
+# =============================================================================
+# ToolsScreen Integration Tests
+# =============================================================================
+
+
+class TestToolsScreenIntegration:
+    """Integration tests for ToolsScreen."""
+
+    @pytest.mark.asyncio
+    async def test_full_filter_flow(self):
+        """Test full filter flow: search -> category -> clear."""
+        app = ChapgentApp()
+        async with app.run_test(size=(100, 50)) as pilot:
+            app.push_screen(ToolsScreen())
+            await pilot.pause()
+
+            screen = app.screen
+            from textual.widgets import Input
+
+            # Search for "git"
+            search = screen.query_one("#tools-search", Input)
+            search.value = "git"
+            await pilot.pause()
+
+            # Filter by git category
+            screen.current_category = "git"
+            screen._update_tools_list()
+            await pilot.pause()
+
+            tools = screen._get_tools()
+            for tool in tools:
+                assert tool.category == ToolCategory.GIT
+
+            # Clear search
+            search.value = ""
+            await pilot.pause()
+
+            # Clear category
+            screen.current_category = None
+            screen._update_tools_list()
+            await pilot.pause()
+
+            tools = screen._get_tools()
+            all_tools = screen._get_all_tools()
+            assert len(tools) == len(all_tools)

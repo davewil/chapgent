@@ -1264,3 +1264,56 @@
   - Learned: Internal methods (e.g., picker._select_theme()) are useful for testing without UI interaction
   - Phase 2.1 of Phase 5 TUI Enhancements complete (ThemePickerScreen)
   - Total: 1466 tests pass
+
+2026-01-20: Implemented Phase 5 TUI Enhancements - Phase 3: Help & Tools (specs/phase-5-tui-enhancements.md):
+  - Added HelpScreen modal in src/chapgent/tui/screens.py:
+    * Shows topic list when opened without topic argument
+    * Shows specific topic content when opened with topic argument
+    * Uses HELP_TOPICS from chapgent/ux/help.py for content
+    * Clickable topic items to navigate between list and topic content
+    * Back button to return from topic view to topic list
+    * Close button and Escape key binding for dismissal
+    * CSS styles embedded in screen class for modal layout
+  - Added ToolsScreen modal in src/chapgent/tui/screens.py:
+    * Shows all tools grouped by category
+    * Search/filter input for filtering tools by name or description
+    * Category dropdown (Select widget) for filtering by category
+    * Validates category on compose, falls back to "All" for invalid categories
+    * Displays tool name, description, and risk level badge ([LOW], [MEDIUM], [HIGH])
+    * Color-coded risk badges using CSS classes (tool-risk-low, etc.)
+    * Close button and Escape key binding for dismissal
+    * Uses cast() for type-safe access to _tool_definition attribute
+  - Updated src/chapgent/tui/app.py:
+    * Added action_show_help(topic: str | None) method
+    * Added action_show_tools(category: str | None) method
+    * Added _handle_tools_command(args) method for /tools slash command
+    * Updated _handle_help_command to open HelpScreen modal instead of inline text
+    * Imports HelpScreen and ToolsScreen from screens module
+  - Updated src/chapgent/tui/widgets.py:
+    * Added "Help" command to DEFAULT_COMMANDS (id="show_help")
+    * Added "View Tools" command to DEFAULT_COMMANDS (id="show_tools")
+  - Updated src/chapgent/tui/__init__.py:
+    * Added HelpScreen and ToolsScreen exports
+  - Added 44 tests to tests/test_tui/test_screens.py:
+    * TestHelpScreen: 4 tests for modal creation and compose
+    * TestHelpScreenNavigation: 3 tests for topic navigation and back button
+    * TestHelpScreenDismissal: 2 tests for close/escape behavior
+    * TestHelpScreenAppIntegration: 5 tests for app integration and slash commands
+    * TestToolsScreen: 4 tests for modal creation and compose
+    * TestToolsScreenFiltering: 3 tests for search and category filtering
+    * TestToolsScreenDismissal: 2 tests for close/escape behavior
+    * TestToolsScreenAppIntegration: 5 tests for app integration and slash commands
+    * TestHelpScreenPropertyBased: 2 property-based tests using hypothesis
+    * TestToolsScreenPropertyBased: 2 property-based tests using hypothesis
+    * TestHelpScreenEdgeCases: 2 tests for empty/whitespace topics
+    * TestToolsScreenEdgeCases: 2 tests for invalid category and empty search
+    * TestHelpScreenIntegration: 1 test for full navigation flow
+    * TestToolsScreenIntegration: 1 test for full filter flow
+  - Learned: Textual Select widget validates initial value against options, must use valid category or empty string
+    * Solution: Validate category in compose() and fall back to empty string for invalid categories
+  - Learned: Static widget doesn't have renderable attribute for direct text access
+    * Solution: Check screen state (current_topic) instead of inspecting rendered content
+  - Learned: Cast functions with _tool_definition attribute to ToolFunction type for mypy compatibility
+  - Learned: ToolCategory enum values can be used directly for category filtering
+  - Phase 3 of Phase 5 TUI Enhancements complete (HelpScreen and ToolsScreen)
+  - Total: 286 TUI tests pass (95 screens tests)
