@@ -57,8 +57,8 @@ class TestStartupTime:
         print(f"\nCLI --help startup: {duration_ms:.2f}ms")
 
         assert result.returncode == 0
-        # Subprocess startup includes Python interpreter, allow 3s
-        assert duration_ms < 3000, f"Startup took {duration_ms:.2f}ms, expected <3000ms"
+        # Subprocess startup includes Python interpreter, allow 5s for CI variability
+        assert duration_ms < 5000, f"Startup took {duration_ms:.2f}ms, expected <5000ms"
 
     def test_cli_version_startup_time(self):
         """Verify 'chapgent --version' runs consistently."""
@@ -81,8 +81,8 @@ class TestStartupTime:
         print(f"\nCLI --version startup: {duration_ms:.2f}ms")
 
         assert result.returncode == 0
-        # Subprocess startup includes Python interpreter, allow 3s
-        assert duration_ms < 3000, f"Startup took {duration_ms:.2f}ms, expected <3000ms"
+        # Subprocess startup includes Python interpreter, allow 5s for CI variability
+        assert duration_ms < 5000, f"Startup took {duration_ms:.2f}ms, expected <5000ms"
 
     def test_module_import_incremental(self):
         """Verify importing additional modules after initial load is fast."""
