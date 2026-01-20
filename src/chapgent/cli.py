@@ -38,6 +38,14 @@ async def _init_agent_and_app(
     use_mock: bool = False,
 ) -> ChapgentApp:
     """Initialize agent and app components."""
+    import os
+
+    from chapgent.core.logging import setup_logging
+
+    # 0. Initialize logging (respects CHAPGENT_LOG_LEVEL env var)
+    log_level = os.environ.get("CHAPGENT_LOG_LEVEL", "INFO").upper()
+    setup_logging(level=log_level)
+
     # 1. Load Config
     settings = await load_config()
 
