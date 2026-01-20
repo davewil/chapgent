@@ -30,9 +30,8 @@ class ChapgentApp(App[None]):
         ("ctrl+c", "quit", "Quit"),
         ("ctrl+n", "new_session", "New Session"),
         ("ctrl+s", "save_session", "Save"),
-        ("ctrl+p", "toggle_permissions", "Toggle Permissions"),
         ("ctrl+b", "toggle_sidebar", "Toggle Sidebar"),
-        ("ctrl+shift+p", "command_palette", "Commands"),
+        ("ctrl+p", "command_palette", "Commands"),
         ("ctrl+t", "toggle_tools", "Toggle Tools"),
         ("ctrl+l", "clear", "Clear"),
     ]

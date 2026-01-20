@@ -12,6 +12,7 @@ from chapgent.tools.base import ToolRisk, tool
 from chapgent.tools.registry import ToolRegistry
 from chapgent.tui.app import ChapgentApp
 from chapgent.tui.widgets import MessageInput, PermissionPrompt, ToolProgressItem
+from tests.test_tui.conftest import get_binding
 
 
 @tool(name="medium_risk_tool", description="A medium risk tool", risk=ToolRisk.MEDIUM)
@@ -120,8 +121,8 @@ async def test_action_new_session(mock_agent):
 
         old_session_id = mock_agent.session.id
 
-        # Press Ctrl+N
-        await pilot.press("ctrl+n")
+        # Create new session via keybinding
+        await pilot.press(get_binding("new_session"))
 
         assert mock_agent.session.id != old_session_id
         assert len(app.query_one("#conversation-messages").children) == 0

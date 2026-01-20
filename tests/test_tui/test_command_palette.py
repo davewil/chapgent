@@ -14,6 +14,7 @@ from chapgent.core.providers import LLMProvider, LLMResponse
 from chapgent.session.models import Session
 from chapgent.tools.registry import ToolRegistry
 from chapgent.tui.app import ChapgentApp
+from tests.test_tui.conftest import get_binding
 from chapgent.tui.widgets import (
     DEFAULT_COMMANDS,
     CommandPalette,
@@ -482,11 +483,10 @@ class TestChapgentAppCommandPaletteIntegration:
 
     @pytest.mark.asyncio
     async def test_keybinding_opens_palette(self):
-        """Test that Ctrl+Shift+P opens the command palette."""
+        """Test that the command_palette keybinding opens the command palette."""
         app = ChapgentApp()
         async with app.run_test() as pilot:
-            # Press Ctrl+Shift+P
-            await pilot.press("ctrl+shift+p")
+            await pilot.press(get_binding("command_palette"))
             await pilot.pause()
 
             # Command palette should be the active screen
@@ -513,7 +513,7 @@ class TestChapgentAppCommandPaletteIntegration:
             app.query_one("ConversationPanel").append_user_message("Test message")
 
             # Open palette
-            await pilot.press("ctrl+shift+p")
+            await pilot.press(get_binding("command_palette"))
             await pilot.pause()
 
             assert isinstance(app.screen, CommandPalette)
@@ -543,7 +543,7 @@ class TestChapgentAppCommandPaletteIntegration:
             initial_display = tool_panel.display
 
             # Open palette and select toggle tools
-            await pilot.press("ctrl+shift+p")
+            await pilot.press(get_binding("command_palette"))
             await pilot.pause()
 
             assert isinstance(app.screen, CommandPalette)

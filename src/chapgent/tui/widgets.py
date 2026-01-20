@@ -121,7 +121,6 @@ DEFAULT_COMMANDS: list[PaletteCommand] = [
         id="toggle_permissions",
         name="Toggle Permissions",
         description="Toggle auto-approve for medium risk tools",
-        shortcut="Ctrl+P",
     ),
     PaletteCommand(
         id="toggle_tools",

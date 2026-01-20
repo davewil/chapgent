@@ -2,6 +2,7 @@ import pytest
 from textual.widgets import Footer, Header
 
 from chapgent.tui.app import ChapgentApp
+from tests.test_tui.conftest import get_binding
 from chapgent.tui.widgets import ConversationPanel, MessageInput, SessionsSidebar, ToolPanel
 
 
@@ -27,5 +28,5 @@ async def test_app_quit_binding():
     """Test that the quit binding works."""
     app = ChapgentApp()
     async with app.run_test() as pilot:
-        await pilot.press("ctrl+c")
+        await pilot.press(get_binding("quit"))
         assert not app.is_running

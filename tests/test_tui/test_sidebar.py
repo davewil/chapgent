@@ -16,6 +16,7 @@ from chapgent.session.storage import SessionStorage
 from chapgent.tools.registry import ToolRegistry
 from chapgent.tui.app import ChapgentApp
 from chapgent.tui.widgets import SessionItem, SessionsSidebar
+from tests.test_tui.conftest import get_binding
 
 # =============================================================================
 # SessionItem Widget Tests
@@ -196,18 +197,18 @@ class TestChapgentAppSidebarIntegration:
 
     @pytest.mark.asyncio
     async def test_toggle_sidebar_keybinding(self):
-        """Test that ctrl+b toggles sidebar visibility."""
+        """Test that toggle_sidebar keybinding toggles sidebar visibility."""
         app = ChapgentApp()
         async with app.run_test() as pilot:
             sidebar = app.query_one(SessionsSidebar)
             assert sidebar.display is True
 
             # Toggle off
-            await pilot.press("ctrl+b")
+            await pilot.press(get_binding("toggle_sidebar"))
             assert sidebar.display is False
 
             # Toggle back on
-            await pilot.press("ctrl+b")
+            await pilot.press(get_binding("toggle_sidebar"))
             assert sidebar.display is True
 
     @pytest.mark.asyncio
@@ -219,7 +220,7 @@ class TestChapgentAppSidebarIntegration:
         app = ChapgentApp(settings=settings)
         async with app.run_test() as pilot:
             # Should not crash, just show warning
-            await pilot.press("ctrl+b")
+            await pilot.press(get_binding("toggle_sidebar"))
             # No sidebar to query
             assert len(app.query(SessionsSidebar)) == 0
 
@@ -244,7 +245,7 @@ class TestChapgentAppSidebarIntegration:
             initial_count = sidebar.get_session_count()
 
             # Create new session
-            await pilot.press("ctrl+n")
+            await pilot.press(get_binding("new_session"))
             await asyncio.sleep(0.1)
 
             # Should have one more session
@@ -273,7 +274,7 @@ class TestChapgentAppSidebarIntegration:
             sidebar.add_session("initial-session", 0, is_active=True)
 
             # Create new session
-            await pilot.press("ctrl+n")
+            await pilot.press(get_binding("new_session"))
             await asyncio.sleep(0.1)
 
             # The new session should be marked active
