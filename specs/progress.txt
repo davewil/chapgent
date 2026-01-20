@@ -1414,3 +1414,38 @@
   - Learned: Textual widget DEFAULT_CSS provides embedded styling without external TCSS
   - Phase 2 of Phase 6 Syntax Highlighting complete (MarkdownRenderer and MarkdownMessage)
   - Total: 1419 tests pass (35 markdown tests added)
+2026-01-20: Phase 6 - Syntax Highlighting (Phase 3: Theme Integration):
+  - Created src/chapgent/tui/themes/ module with theme mapping utilities
+    * themes/__init__.py: exports for theme utilities
+    * themes/syntax.py: Textual to Pygments theme mapping
+  - Implemented THEME_MAPPING dictionary:
+    * Maps 11 valid Textual themes to corresponding Pygments themes
+    * Dark themes: textual-dark→monokai, dracula→dracula, nord→nord, gruvbox→gruvbox-dark, etc.
+    * Light themes: textual-light→friendly, solarized-light→solarized-light
+  - Implemented get_syntax_theme(textual_theme) function:
+    * Direct mapping lookup first
+    * Heuristic fallback based on is_dark_theme() detection
+    * Never raises - always returns valid Pygments theme name
+  - Implemented is_dark_theme(textual_theme) function:
+    * Detects light themes via LIGHT_THEME_INDICATORS ("light", "solarized-light")
+    * Case-insensitive matching
+    * Defaults to dark for unknown themes
+  - Default theme constants:
+    * DEFAULT_DARK_THEME = "monokai"
+    * DEFAULT_LIGHT_THEME = "friendly"
+  - Created tests/test_tui/test_themes.py:
+    * 36 behavioral tests across 7 test classes
+    * TestThemeMapping: mapping structure and known values
+    * TestGetSyntaxTheme: direct mappings, fallbacks, case sensitivity
+    * TestIsDarkTheme: theme classification, case insensitivity
+    * TestDefaultConstants: constant validation
+    * TestPropertyBased: Hypothesis tests for robustness with all valid themes and random strings
+    * TestEdgeCases: empty, whitespace, unicode, light substring detection
+    * TestIntegration: theme system with MarkdownConfig
+  - Updated src/chapgent/tui/__init__.py: exported theme utilities
+  - Learned: LIGHT_THEME_INDICATORS as frozenset provides efficient lookups and immutability
+  - Learned: Heuristic fallback (is_dark_theme) provides reasonable defaults for unknown themes
+  - Learned: Case-insensitive matching in is_dark_theme uses str.lower() for robustness
+  - Learned: Integration tests verifying theme-to-config flow catch potential mismatches
+  - Phase 3 of Phase 6 Syntax Highlighting complete (Theme Integration)
+  - Total: 1455 tests pass (36 theme tests added)

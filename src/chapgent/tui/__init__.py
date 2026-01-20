@@ -27,6 +27,13 @@ from chapgent.tui.screens import (
     ThemePickerScreen,
     ToolsScreen,
 )
+from chapgent.tui.themes import (
+    DEFAULT_DARK_THEME,
+    DEFAULT_LIGHT_THEME,
+    THEME_MAPPING,
+    get_syntax_theme,
+    is_dark_theme,
+)
 from chapgent.tui.widgets import (
     CommandPalette,
     CommandPaletteItem,
@@ -67,6 +74,12 @@ __all__ = [
     "LLMSettingsScreen",
     "ThemePickerScreen",
     "ToolsScreen",
+    # Themes
+    "DEFAULT_DARK_THEME",
+    "DEFAULT_LIGHT_THEME",
+    "THEME_MAPPING",
+    "get_syntax_theme",
+    "is_dark_theme",
     # Widgets
     "CommandPalette",
     "CommandPaletteItem",

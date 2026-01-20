@@ -936,10 +936,13 @@ uv run pytest tests/test_tui/test_markdown.py tests/test_tui/test_highlighter.py
    - Added 35 behavioral tests (unit + property-based with Hypothesis)
    - Exports added to `tui/__init__.py`
 
-3. **Phase 3: Theme Integration**
-   - Create `themes/syntax.py`
-   - Map Textual themes to Pygments themes
-   - Add tests
+3. **Phase 3: Theme Integration** ✓ COMPLETE
+   - Created `themes/syntax.py` with `THEME_MAPPING` and helper functions
+   - `get_syntax_theme()` maps Textual themes to Pygments themes
+   - `is_dark_theme()` detects light vs dark themes
+   - Default fallbacks: `monokai` (dark), `friendly` (light)
+   - Added 36 behavioral tests (unit + property-based with Hypothesis)
+   - Exports added to `tui/__init__.py` and `tui/themes/__init__.py`
 
 4. **Phase 4: Widget Integration**
    - Update `ConversationPanel` to use `MarkdownMessage`
@@ -965,17 +968,17 @@ uv run pytest tests/test_tui/test_markdown.py tests/test_tui/test_highlighter.py
 - [ ] Inline code renders with distinct background
 - [ ] Blockquotes render with left border
 - [ ] Links render with underline style
-- [ ] Theme changes update syntax colors
+- [x] Theme changes update syntax colors (via get_syntax_theme mapping)
 
 ### Non-Functional
 
 - [x] No new dependencies required
 - [ ] Rendering adds <50ms latency for typical messages
-- [x] All tests pass (89 highlighter tests)
+- [x] All tests pass (89 highlighter + 35 markdown + 36 theme = 160 total tests)
 - [x] Architecture supports future tree-sitter migration (TreeSitterHighlighter stub)
 
 ---
 
-*Document Version: 1.2*
+*Document Version: 1.3*
 *Created: 2026-01-20*
-*Updated: 2026-01-20* - Phase 2 complete
+*Updated: 2026-01-20* - Phase 3 complete
