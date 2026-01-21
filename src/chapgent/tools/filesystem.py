@@ -11,13 +11,13 @@ import aiofiles
 from chapgent.tools.base import ToolCategory, ToolRisk, tool
 
 # Size limits to prevent context window overflow
-MAX_FILE_SIZE = 100_000  # 100KB - larger files are truncated
-MAX_LIST_ENTRIES = 500  # Maximum files/dirs returned by list_files
+MAX_FILE_SIZE = 30_000  # 30KB - larger files are truncated
+MAX_LIST_ENTRIES = 200  # Maximum files/dirs returned by list_files
 
 
 @tool(
     name="read_file",
-    description="Read the contents of a file at the given path (truncated if >100KB)",
+    description="Read the contents of a file at the given path (truncated if >30KB)",
     risk=ToolRisk.LOW,
     category=ToolCategory.FILESYSTEM,
     read_only=True,
@@ -62,7 +62,7 @@ async def read_file(path: str) -> str:
 
 @tool(
     name="list_files",
-    description="List files and directories at the given path (max 500 entries)",
+    description="List files and directories at the given path (max 200 entries)",
     risk=ToolRisk.LOW,
     category=ToolCategory.FILESYSTEM,
     read_only=True,

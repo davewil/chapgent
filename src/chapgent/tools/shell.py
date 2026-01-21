@@ -3,12 +3,12 @@ import asyncio
 from chapgent.tools.base import ToolCategory, ToolRisk, tool
 
 # Output limit to prevent context window overflow
-MAX_OUTPUT_SIZE = 100_000  # 100KB
+MAX_OUTPUT_SIZE = 30_000  # 30KB
 
 
 @tool(
     name="shell",
-    description="Execute a shell command and return output (truncated if >100KB).",
+    description="Execute a shell command and return output (truncated if >30KB).",
     risk=ToolRisk.HIGH,
     category=ToolCategory.SHELL,
     cacheable=False,

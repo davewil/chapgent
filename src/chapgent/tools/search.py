@@ -15,7 +15,7 @@ from pathlib import Path
 from chapgent.tools.base import ToolCategory, ToolRisk, tool
 
 # Limit to prevent context window overflow
-MAX_FIND_RESULTS = 500
+MAX_FIND_RESULTS = 200
 
 
 def _is_ripgrep_available() -> bool:
@@ -230,7 +230,7 @@ def _get_depth(path: Path, base_path: Path) -> int:
 
 @tool(
     name="find_files",
-    description="Find files and directories matching a glob pattern (max 500 results).",
+    description="Find files and directories matching a glob pattern (max 200 results).",
     risk=ToolRisk.LOW,
     category=ToolCategory.SEARCH,
     read_only=True,
