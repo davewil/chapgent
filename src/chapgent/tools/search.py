@@ -14,6 +14,9 @@ from pathlib import Path
 
 from chapgent.tools.base import ToolCategory, ToolRisk, tool
 
+# Limit to prevent context window overflow
+MAX_FIND_RESULTS = 500
+
 
 def _is_ripgrep_available() -> bool:
     """Check if ripgrep (rg) is available on the system."""
@@ -227,7 +230,7 @@ def _get_depth(path: Path, base_path: Path) -> int:
 
 @tool(
     name="find_files",
-    description="Find files and directories matching a glob pattern. Returns a list of matching paths.",
+    description="Find files and directories matching a glob pattern (max 500 results).",
     risk=ToolRisk.LOW,
     category=ToolCategory.SEARCH,
     read_only=True,
@@ -257,8 +260,14 @@ async def find_files(
         raise NotADirectoryError(f"Path is not a directory: {path}")
 
     matches: list[str] = []
+    truncated = False
 
     for item in search_path.glob(pattern):
+        # Check result limit
+        if len(matches) >= MAX_FIND_RESULTS:
+            truncated = True
+            break
+
         # Skip hidden files and common ignore directories
         if not _should_include_path(item, search_path):
             continue
@@ -288,7 +297,12 @@ async def find_files(
     if not matches:
         return json.dumps({"message": "No files found", "files": []})
 
-    return json.dumps({"count": len(matches), "files": matches}, indent=2)
+    result = {"count": len(matches), "files": matches}
+    if truncated:
+        result["truncated"] = True
+        result["message"] = f"Showing first {MAX_FIND_RESULTS} results. Use more specific pattern."
+
+    return json.dumps(result, indent=2)
 
 
 # Language-specific definition patterns

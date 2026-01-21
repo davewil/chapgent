@@ -10,10 +10,14 @@ import aiofiles
 
 from chapgent.tools.base import ToolCategory, ToolRisk, tool
 
+# Size limits to prevent context window overflow
+MAX_FILE_SIZE = 100_000  # 100KB - larger files are truncated
+MAX_LIST_ENTRIES = 500  # Maximum files/dirs returned by list_files
+
 
 @tool(
     name="read_file",
-    description="Read the contents of a file at the given path",
+    description="Read the contents of a file at the given path (truncated if >100KB)",
     risk=ToolRisk.LOW,
     category=ToolCategory.FILESYSTEM,
     read_only=True,
@@ -25,7 +29,7 @@ async def read_file(path: str) -> str:
         path: Path to the file (absolute or relative to cwd).
 
     Returns:
-        File contents as string.
+        File contents as string. Large files (>100KB) are truncated.
 
     Raises:
         FileNotFoundError: If file doesn't exist.
@@ -38,13 +42,27 @@ async def read_file(path: str) -> str:
     if not file_path.is_file():
         raise IsADirectoryError(f"Path is a directory: {path}")
 
+    # Check file size before reading
+    file_size = file_path.stat().st_size
+
     async with aiofiles.open(file_path, encoding="utf-8") as f:
-        return await f.read()
+        content = await f.read()
+
+    # Truncate large files to prevent context overflow
+    if len(content) > MAX_FILE_SIZE:
+        truncated_content = content[:MAX_FILE_SIZE]
+        return (
+            f"{truncated_content}\n\n"
+            f"[TRUNCATED: File is {file_size:,} bytes, showing first {MAX_FILE_SIZE:,} chars. "
+            f"Use line offsets or grep for specific content.]"
+        )
+
+    return content
 
 
 @tool(
     name="list_files",
-    description="List files and directories at the given path",
+    description="List files and directories at the given path (max 500 entries)",
     risk=ToolRisk.LOW,
     category=ToolCategory.FILESYSTEM,
     read_only=True,
@@ -54,7 +72,7 @@ async def list_files(path: str = ".", recursive: bool = False) -> str:
 
     Args:
         path: Directory path (default: current directory).
-        recursive: If True, list recursively.
+        recursive: If True, list recursively (limited to 500 entries).
 
     Returns:
         JSON array of file/directory entries.
@@ -64,17 +82,32 @@ async def list_files(path: str = ".", recursive: bool = False) -> str:
         raise FileNotFoundError(f"Directory not found: {path}")
 
     entries = []
+    truncated = False
 
     if recursive:
-        # Recursive listing
+        # Recursive listing with limit
         for p in root.rglob("*"):
+            if len(entries) >= MAX_LIST_ENTRIES:
+                truncated = True
+                break
             entries.append(_path_to_entry(p, root))
     else:
-        # Flat listing
+        # Flat listing with limit
         for p in root.iterdir():
+            if len(entries) >= MAX_LIST_ENTRIES:
+                truncated = True
+                break
             entries.append(_path_to_entry(p, root))
 
-    return json.dumps(entries, indent=2)
+    result = json.dumps(entries, indent=2)
+
+    if truncated:
+        result += (
+            f"\n\n[TRUNCATED: Showing first {MAX_LIST_ENTRIES} entries. "
+            f"Use find_files with a specific pattern for targeted searches.]"
+        )
+
+    return result
 
 
 def _path_to_entry(path: Path, root: Path) -> dict[str, Any]:

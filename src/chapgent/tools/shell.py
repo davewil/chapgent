@@ -2,10 +2,13 @@ import asyncio
 
 from chapgent.tools.base import ToolCategory, ToolRisk, tool
 
+# Output limit to prevent context window overflow
+MAX_OUTPUT_SIZE = 100_000  # 100KB
+
 
 @tool(
     name="shell",
-    description="Execute a shell command and return output. Returns stdout and stderr combined.",
+    description="Execute a shell command and return output (truncated if >100KB).",
     risk=ToolRisk.HIGH,
     category=ToolCategory.SHELL,
     cacheable=False,
@@ -18,7 +21,7 @@ async def shell(command: str, timeout: int = 60) -> str:
         timeout: Maximum execution time in seconds.
 
     Returns:
-        Combined stdout and stderr, plus exit code.
+        Combined stdout and stderr, plus exit code. Large outputs are truncated.
     """
     try:
         process = await asyncio.create_subprocess_shell(
@@ -50,7 +53,18 @@ async def shell(command: str, timeout: int = 60) -> str:
 
         output.append(f"\nExit Code: {process.returncode}")
 
-        return "\n".join(output).strip()
+        result = "\n".join(output).strip()
+
+        # Truncate large outputs to prevent context overflow
+        if len(result) > MAX_OUTPUT_SIZE:
+            truncated = result[:MAX_OUTPUT_SIZE]
+            return (
+                f"{truncated}\n\n"
+                f"[TRUNCATED: Output was {len(result):,} chars, showing first {MAX_OUTPUT_SIZE:,}. "
+                f"Pipe to head/tail or redirect to file for full output.]"
+            )
+
+        return result
 
     except Exception as e:
         return f"Error executing command: {str(e)}"
