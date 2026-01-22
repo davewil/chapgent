@@ -660,46 +660,86 @@ def auth() -> None:
 
 @auth.command()
 @click.option(
-    "--provider",
-    type=click.Choice(["anthropic-max"]),
-    default="anthropic-max",
-    help="Authentication provider",
+    "--import-claude-code",
+    is_flag=True,
+    help="Import OAuth token from Claude Code credentials (~/.claude/.credentials.json)",
 )
-def login(provider: str) -> None:
+@click.option(
+    "--token",
+    help="Directly provide an OAuth token",
+)
+def login(import_claude_code: bool, token: str | None) -> None:
     """Authenticate with Claude Max subscription.
 
-    Opens browser for OAuth authorization, then prompts for token.
+    Claude Max OAuth tokens can be obtained by:
+    1. Installing Claude Code CLI and running '/login'
+    2. Using --import-claude-code to import from Claude Code's credentials
+    3. Providing a token directly with --token
     """
-    import webbrowser
+    import json
 
     from rich.console import Console
 
-    # Known Claude Max OAuth URL
-    oauth_url = "https://console.anthropic.com/oauth/authorize"
+    from chapgent.config.writer import save_config_value
 
     console = Console()
     console.print("\n[bold]Claude Max Authentication[/bold]\n")
-    console.print("1. Open this URL in your browser to authorize:")
-    console.print(f"   [link={oauth_url}]{oauth_url}[/link]\n")
 
-    if click.confirm("Open URL in browser automatically?", default=True):
-        webbrowser.open(oauth_url)
+    # Option 1: Import from Claude Code
+    if import_claude_code:
+        credentials_path = Path.home() / ".claude" / ".credentials.json"
+        if not credentials_path.exists():
+            console.print("[red]Error: Claude Code credentials not found[/red]")
+            console.print(f"  Expected: {credentials_path}")
+            console.print("\nTo get credentials:")
+            console.print("  1. Install Claude Code: npm install -g @anthropic/claude-code")
+            console.print("  2. Run: claude")
+            console.print("  3. Type: /login")
+            raise SystemExit(1)
 
-    console.print("2. After authorizing, copy the OAuth token from the success page.\n")
+        try:
+            with open(credentials_path) as f:
+                creds = json.load(f)
+            token = creds.get("accessToken") or creds.get("access_token")
+            if not token:
+                console.print("[red]Error: No access token found in credentials[/red]")
+                raise SystemExit(1)
+            console.print("[green]✓ Imported token from Claude Code credentials[/green]")
+        except json.JSONDecodeError:
+            console.print("[red]Error: Invalid JSON in credentials file[/red]")
+            raise SystemExit(1)
 
-    token = click.prompt("3. Paste your OAuth token here", hide_input=True)
+    # Option 2: Token provided directly
+    elif token:
+        console.print("Using provided token...")
 
-    # Basic validation
+    # Option 3: Interactive - guide user
+    else:
+        console.print("To authenticate with Claude Max, you have several options:\n")
+        console.print("[bold]Option 1: Import from Claude Code (Recommended)[/bold]")
+        console.print("  If you have Claude Code installed and logged in:")
+        console.print("    chapgent auth login --import-claude-code\n")
+        console.print("[bold]Option 2: Use Claude Code to login first[/bold]")
+        console.print("  1. Install Claude Code: npm install -g @anthropic/claude-code")
+        console.print("  2. Run: claude")
+        console.print("  3. Type: /login")
+        console.print("  4. Then run: chapgent auth login --import-claude-code\n")
+        console.print("[bold]Option 3: Enter token manually[/bold]")
+
+        if not click.confirm("Do you have an OAuth token to enter manually?", default=False):
+            console.print("\nRun 'chapgent auth login --import-claude-code' after logging into Claude Code.")
+            return
+
+        token = click.prompt("Paste your OAuth token", hide_input=True)
+
+    # Validate and save token
     if not token or len(token) < 20:
         console.print("[red]Error: Invalid token format[/red]")
         raise SystemExit(1)
 
-    # Store in config
-    from chapgent.config.writer import save_config_value
-
     try:
         config_path, _ = save_config_value("llm.oauth_token", token, project=False)
-        console.print("[green]✓ OAuth token saved successfully![/green]")
+        console.print(f"[green]✓ OAuth token saved successfully![/green]")
         console.print(f"  Config: {config_path}")
     except ConfigWriteError as e:
         raise click.ClickException(str(e)) from None
@@ -930,32 +970,46 @@ def proxy_setup() -> None:
     # Step 3: OAuth token for Claude Max
     console.print("\n[bold]Step 3: Claude Max OAuth token[/bold]")
     console.print("To use your Claude Max subscription instead of per-token API pricing,")
-    console.print("you need to authenticate with your Anthropic account.")
+    console.print("you need an OAuth token from Claude Code.")
     console.print()
 
     if click.confirm("Configure Claude Max OAuth token?", default=True):
-        console.print("\nTo get your OAuth token:")
-        console.print("  1. Go to https://console.anthropic.com/oauth/authorize")
-        console.print("  2. Authorize the application")
-        console.print("  3. Copy the token from the success page")
-        console.print()
+        # Check for existing Claude Code credentials
+        credentials_path = Path.home() / ".claude" / ".credentials.json"
 
-        if click.confirm("Open OAuth URL in browser?", default=True):
-            import webbrowser
-
-            webbrowser.open("https://console.anthropic.com/oauth/authorize")
-
-        console.print()
-        token = click.prompt("Paste your OAuth token", hide_input=True)
-
-        if token and len(token) >= 20:
-            try:
-                save_config_value("llm.oauth_token", token, project=False)
-                console.print("[green]✓ OAuth token saved[/green]")
-            except ConfigWriteError as e:
-                console.print(f"[red]Error saving token: {e}[/red]")
+        if credentials_path.exists():
+            if click.confirm("Found Claude Code credentials. Import token from there?", default=True):
+                try:
+                    with open(credentials_path) as f:
+                        creds = json.load(f)
+                    token = creds.get("accessToken") or creds.get("access_token")
+                    if token and len(token) >= 20:
+                        save_config_value("llm.oauth_token", token, project=False)
+                        console.print("[green]✓ OAuth token imported from Claude Code[/green]")
+                    else:
+                        console.print("[yellow]No valid token found in credentials[/yellow]")
+                except (json.JSONDecodeError, ConfigWriteError) as e:
+                    console.print(f"[red]Error importing token: {e}[/red]")
+            else:
+                console.print("[dim]Skipping OAuth token configuration[/dim]")
         else:
-            console.print("[yellow]Token appears invalid, skipping[/yellow]")
+            console.print("To get your OAuth token:")
+            console.print("  1. Install Claude Code: npm install -g @anthropic/claude-code")
+            console.print("  2. Run: claude")
+            console.print("  3. Type: /login")
+            console.print("  4. Then run: chapgent auth login --import-claude-code")
+            console.print()
+
+            if click.confirm("Do you have a token to enter manually?", default=False):
+                token = click.prompt("Paste your OAuth token", hide_input=True)
+                if token and len(token) >= 20:
+                    try:
+                        save_config_value("llm.oauth_token", token, project=False)
+                        console.print("[green]✓ OAuth token saved[/green]")
+                    except ConfigWriteError as e:
+                        console.print(f"[red]Error saving token: {e}[/red]")
+                else:
+                    console.print("[yellow]Token appears invalid, skipping[/yellow]")
 
     # Step 4: Save base_url
     console.print("\n[bold]Step 4: Save proxy configuration[/bold]")

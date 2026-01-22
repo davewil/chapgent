@@ -289,14 +289,14 @@ class TestAuthCommands:
         assert "logout" in result.output
         assert "status" in result.output
 
-    def test_auth_login_displays_url(self):
-        """Verify login command shows OAuth URL."""
+    def test_auth_login_shows_options(self):
+        """Verify login command shows authentication options."""
         runner = CliRunner()
-        # Answer "n" to browser prompt, then provide a token
-        result = runner.invoke(cli, ["auth", "login"], input="n\ntest-token-12345678901234567890\n")
+        # Answer "n" to manual token prompt
+        result = runner.invoke(cli, ["auth", "login"], input="n\n")
 
-        # Should mention OAuth URL
-        assert "console.anthropic.com/oauth/authorize" in result.output
+        # Should mention import option
+        assert "import-claude-code" in result.output or "Claude Code" in result.output
 
     @patch("chapgent.cli.load_config")
     def test_auth_status_no_auth(self, mock_load_config):

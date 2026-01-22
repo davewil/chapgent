@@ -450,9 +450,12 @@ CLAUDE MAX SUBSCRIPTION
 -----------------------
 To use Claude Max instead of per-token API pricing:
 
-  1. Run: chapgent auth login
-  2. Follow the OAuth flow to authenticate
-  3. Your Max subscription will be used for all requests
+  1. Install Claude Code: npm install -g @anthropic/claude-code
+  2. Run: claude
+  3. Type: /login (to authenticate with your Max subscription)
+  4. Run: chapgent auth login --import-claude-code
+
+This imports your OAuth token from Claude Code's credentials.
 
 For more information:
   chapgent help proxy
