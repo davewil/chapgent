@@ -10,18 +10,23 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from chapgent.ux.first_run import (
+    ProxySetupStatus,
     SetupStatus,
     check_api_key,
+    check_proxy_setup_status,
     check_setup_status,
     create_first_run_marker,
     format_setup_complete_message,
     get_api_key_help,
     get_config_path,
+    get_proxy_setup_instructions,
+    get_proxy_welcome_message,
     get_setup_instructions,
     get_welcome_message,
     has_completed_first_run,
     should_show_first_run_prompt,
     validate_api_key_format,
+    validate_proxy_url,
 )
 
 
@@ -450,3 +455,167 @@ class TestIntegration:
         status = check_setup_status()
         assert status.has_api_key is True
         assert status.is_first_run is False
+
+
+# =============================================================================
+# Proxy Setup Tests
+# =============================================================================
+
+
+class TestProxySetupStatus:
+    """Tests for ProxySetupStatus dataclass."""
+
+    def test_create_proxy_setup_status(self) -> None:
+        """Should create a ProxySetupStatus."""
+        status = ProxySetupStatus(
+            needs_proxy_setup=True,
+            has_proxy_url=False,
+            has_litellm_key=False,
+            has_oauth_token=False,
+            proxy_url=None,
+            missing_items=["Proxy URL"],
+        )
+        assert status.needs_proxy_setup is True
+        assert status.has_proxy_url is False
+        assert status.has_litellm_key is False
+        assert status.has_oauth_token is False
+        assert status.proxy_url is None
+        assert "Proxy URL" in status.missing_items
+
+    def test_proxy_status_fully_configured(self) -> None:
+        """Should represent fully configured proxy state."""
+        status = ProxySetupStatus(
+            needs_proxy_setup=False,
+            has_proxy_url=True,
+            has_litellm_key=True,
+            has_oauth_token=True,
+            proxy_url="http://localhost:4000",
+            missing_items=[],
+        )
+        assert status.needs_proxy_setup is False
+        assert status.has_proxy_url is True
+        assert status.proxy_url == "http://localhost:4000"
+
+
+class TestCheckProxySetupStatus:
+    """Tests for check_proxy_setup_status function."""
+
+    def test_returns_proxy_setup_status(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should return a ProxySetupStatus object."""
+        monkeypatch.delenv("CHAPGENT_BASE_URL", raising=False)
+        monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
+        monkeypatch.delenv("CHAPGENT_OAUTH_TOKEN", raising=False)
+        monkeypatch.delenv("ANTHROPIC_OAUTH_TOKEN", raising=False)
+
+        result = check_proxy_setup_status()
+        assert isinstance(result, ProxySetupStatus)
+
+    def test_detects_proxy_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should detect proxy URL from env var."""
+        monkeypatch.setenv("CHAPGENT_BASE_URL", "http://localhost:4000")
+
+        result = check_proxy_setup_status()
+        assert result.has_proxy_url is True
+        assert result.proxy_url == "http://localhost:4000"
+
+    def test_detects_anthropic_base_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should detect proxy URL from ANTHROPIC_BASE_URL."""
+        monkeypatch.delenv("CHAPGENT_BASE_URL", raising=False)
+        monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://proxy.example.com")
+
+        result = check_proxy_setup_status()
+        assert result.has_proxy_url is True
+        assert result.proxy_url == "https://proxy.example.com"
+
+    def test_detects_oauth_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should detect OAuth token from env var."""
+        monkeypatch.setenv("CHAPGENT_OAUTH_TOKEN", "oauth-test-token")
+
+        result = check_proxy_setup_status()
+        assert result.has_oauth_token is True
+
+    def test_detects_litellm_key_in_headers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should detect LiteLLM key in extra headers."""
+        monkeypatch.setenv("CHAPGENT_EXTRA_HEADERS", '{"x-litellm-api-key": "Bearer sk-test"}')
+
+        result = check_proxy_setup_status()
+        assert result.has_litellm_key is True
+
+
+class TestValidateProxyUrl:
+    """Tests for validate_proxy_url function."""
+
+    def test_valid_http_url(self) -> None:
+        """Should accept valid HTTP URL."""
+        is_valid, message = validate_proxy_url("http://localhost:4000")
+        assert is_valid is True
+
+    def test_valid_https_url(self) -> None:
+        """Should accept valid HTTPS URL."""
+        is_valid, message = validate_proxy_url("https://proxy.example.com")
+        assert is_valid is True
+
+    def test_empty_url_invalid(self) -> None:
+        """Empty URL should be invalid."""
+        is_valid, message = validate_proxy_url("")
+        assert is_valid is False
+        assert "empty" in message.lower()
+
+    def test_no_protocol_invalid(self) -> None:
+        """URL without protocol should be invalid."""
+        is_valid, message = validate_proxy_url("localhost:4000")
+        assert is_valid is False
+        assert "http" in message.lower()
+
+    def test_ftp_protocol_invalid(self) -> None:
+        """FTP protocol should be invalid."""
+        is_valid, message = validate_proxy_url("ftp://proxy.example.com")
+        assert is_valid is False
+
+    def test_whitespace_stripped(self) -> None:
+        """Whitespace should be stripped."""
+        is_valid, _ = validate_proxy_url("  http://localhost:4000  ")
+        assert is_valid is True
+
+
+class TestGetProxyWelcomeMessage:
+    """Tests for get_proxy_welcome_message function."""
+
+    def test_returns_string(self) -> None:
+        """Should return a string."""
+        result = get_proxy_welcome_message()
+        assert isinstance(result, str)
+
+    def test_contains_litellm(self) -> None:
+        """Should mention LiteLLM."""
+        result = get_proxy_welcome_message()
+        assert "LiteLLM" in result
+
+    def test_contains_proxy(self) -> None:
+        """Should mention proxy."""
+        result = get_proxy_welcome_message()
+        assert "Proxy" in result or "proxy" in result
+
+
+class TestGetProxySetupInstructions:
+    """Tests for get_proxy_setup_instructions function."""
+
+    def test_returns_string(self) -> None:
+        """Should return a string."""
+        result = get_proxy_setup_instructions()
+        assert isinstance(result, str)
+
+    def test_mentions_local_proxy(self) -> None:
+        """Should mention local proxy option."""
+        result = get_proxy_setup_instructions()
+        assert "Local" in result or "local" in result
+
+    def test_mentions_remote_proxy(self) -> None:
+        """Should mention remote proxy option."""
+        result = get_proxy_setup_instructions()
+        assert "Remote" in result or "remote" in result
+
+    def test_mentions_claude_max(self) -> None:
+        """Should mention Claude Max."""
+        result = get_proxy_setup_instructions()
+        assert "Claude Max" in result or "Max" in result

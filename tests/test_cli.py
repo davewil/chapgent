@@ -269,3 +269,123 @@ class TestToolsCommand:
 
         assert result.exit_code == 0
         assert "tools" in result.output
+
+
+# =============================================================================
+# Test Auth Commands
+# =============================================================================
+
+
+class TestAuthCommands:
+    """Tests for chapgent auth commands."""
+
+    def test_auth_is_group(self):
+        """Test auth is a command group with subcommands."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["auth", "--help"])
+
+        assert result.exit_code == 0
+        assert "login" in result.output
+        assert "logout" in result.output
+        assert "status" in result.output
+
+    def test_auth_login_displays_url(self):
+        """Verify login command shows OAuth URL."""
+        runner = CliRunner()
+        # Answer "n" to browser prompt, then provide a token
+        result = runner.invoke(cli, ["auth", "login"], input="n\ntest-token-12345678901234567890\n")
+
+        # Should mention OAuth URL
+        assert "console.anthropic.com/oauth/authorize" in result.output
+
+    @patch("chapgent.cli.load_config")
+    def test_auth_status_no_auth(self, mock_load_config):
+        """Verify status shows no auth when unconfigured."""
+        from chapgent.config.settings import Settings
+
+        mock_load_config.return_value = Settings()
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["auth", "status"])
+
+        assert result.exit_code == 0
+        assert "No authentication configured" in result.output
+
+    @patch("chapgent.cli.load_config")
+    def test_auth_status_with_api_key(self, mock_load_config):
+        """Verify status shows API key when configured."""
+        from chapgent.config.settings import Settings
+
+        settings = Settings()
+        settings.llm.api_key = "sk-ant-test12345678901234567890"
+        mock_load_config.return_value = settings
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["auth", "status"])
+
+        assert result.exit_code == 0
+        assert "API key configured" in result.output
+
+    @patch("chapgent.cli.load_config")
+    def test_auth_status_with_oauth_token(self, mock_load_config):
+        """Verify status shows OAuth token when configured."""
+        from chapgent.config.settings import Settings
+
+        settings = Settings()
+        settings.llm.oauth_token = "oauth-token-12345678901234567890"
+        mock_load_config.return_value = settings
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["auth", "status"])
+
+        assert result.exit_code == 0
+        assert "OAuth token configured" in result.output
+
+
+# =============================================================================
+# Test Proxy Commands
+# =============================================================================
+
+
+class TestProxyCommands:
+    """Tests for chapgent proxy commands."""
+
+    def test_proxy_is_group(self):
+        """Test proxy is a command group with subcommands."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["proxy", "--help"])
+
+        assert result.exit_code == 0
+        assert "start" in result.output
+        assert "setup" in result.output
+
+    @patch("subprocess.run")
+    def test_proxy_start_displays_instructions(self, mock_run):
+        """Verify proxy start shows configuration instructions."""
+        # Mock subprocess to raise KeyboardInterrupt immediately
+        mock_run.side_effect = KeyboardInterrupt()
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["proxy", "start"])
+
+        # Should show proxy info before starting
+        assert "Starting LiteLLM Proxy" in result.output
+        assert "CHAPGENT_BASE_URL" in result.output
+
+    @patch("subprocess.run")
+    def test_proxy_start_custom_port(self, mock_run):
+        """Verify proxy start uses custom port."""
+        mock_run.side_effect = KeyboardInterrupt()
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["proxy", "start", "--port", "8080"])
+
+        assert "8080" in result.output
+
+    def test_proxy_setup_help(self):
+        """Verify proxy setup shows help."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["proxy", "setup", "--help"])
+
+        assert result.exit_code == 0
+        assert "Interactive setup wizard" in result.output

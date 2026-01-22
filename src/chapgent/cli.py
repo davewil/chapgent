@@ -58,6 +58,8 @@ async def _init_agent_and_app(
         provider = LLMProvider(
             model=settings.llm.model,
             api_key=settings.llm.api_key,
+            base_url=settings.llm.base_url,
+            extra_headers=settings.llm.extra_headers,
         )
 
     tools = ToolRegistry()
@@ -643,6 +645,344 @@ def setup() -> None:
         click.echo(format_setup_complete_message(settings))
     except Exception:
         click.echo(format_setup_complete_message(None))
+
+
+# =============================================================================
+# Auth Commands
+# =============================================================================
+
+
+@cli.group()
+def auth() -> None:
+    """Authentication commands for Claude Max subscription."""
+    pass
+
+
+@auth.command()
+@click.option(
+    "--provider",
+    type=click.Choice(["anthropic-max"]),
+    default="anthropic-max",
+    help="Authentication provider",
+)
+def login(provider: str) -> None:
+    """Authenticate with Claude Max subscription.
+
+    Opens browser for OAuth authorization, then prompts for token.
+    """
+    import webbrowser
+
+    from rich.console import Console
+
+    # Known Claude Max OAuth URL
+    oauth_url = "https://console.anthropic.com/oauth/authorize"
+
+    console = Console()
+    console.print("\n[bold]Claude Max Authentication[/bold]\n")
+    console.print("1. Open this URL in your browser to authorize:")
+    console.print(f"   [link={oauth_url}]{oauth_url}[/link]\n")
+
+    if click.confirm("Open URL in browser automatically?", default=True):
+        webbrowser.open(oauth_url)
+
+    console.print("2. After authorizing, copy the OAuth token from the success page.\n")
+
+    token = click.prompt("3. Paste your OAuth token here", hide_input=True)
+
+    # Basic validation
+    if not token or len(token) < 20:
+        console.print("[red]Error: Invalid token format[/red]")
+        raise SystemExit(1)
+
+    # Store in config
+    from chapgent.config.writer import save_config_value
+
+    try:
+        config_path, _ = save_config_value("llm.oauth_token", token, project=False)
+        console.print("[green]✓ OAuth token saved successfully![/green]")
+        console.print(f"  Config: {config_path}")
+    except ConfigWriteError as e:
+        raise click.ClickException(str(e)) from None
+
+
+@auth.command()
+def logout() -> None:
+    """Remove stored authentication tokens."""
+    from rich.console import Console
+
+    from chapgent.config.writer import save_config_value
+
+    console = Console()
+
+    try:
+        # Remove oauth_token
+        save_config_value("llm.oauth_token", "", project=False)
+        # Remove api_key
+        save_config_value("llm.api_key", "", project=False)
+        console.print("[green]✓ Authentication tokens removed[/green]")
+    except ConfigWriteError as e:
+        raise click.ClickException(str(e)) from None
+
+
+@auth.command()
+def status() -> None:
+    """Show current authentication status."""
+    from rich.console import Console
+
+    settings = asyncio.run(load_config())
+    console = Console()
+
+    console.print("\n[bold]Authentication Status[/bold]\n")
+
+    if settings.llm.oauth_token:
+        console.print("[green]✓ Claude Max OAuth token configured[/green]")
+        # Show partial token for verification
+        token = settings.llm.oauth_token
+        masked = token[:8] + "..." + token[-4:] if len(token) > 12 else "****"
+        console.print(f"  Token: {masked}")
+    elif settings.llm.api_key:
+        console.print("[green]✓ API key configured[/green]")
+        # Show partial key for verification
+        key = settings.llm.api_key
+        masked = key[:8] + "..." + key[-4:] if len(key) > 12 else "****"
+        console.print(f"  Key: {masked}")
+    else:
+        console.print("[yellow]✗ No authentication configured[/yellow]")
+        console.print("  Run: chapgent auth login")
+
+    # Show base_url if configured (for proxy)
+    if settings.llm.base_url:
+        console.print(f"\n[dim]Proxy URL: {settings.llm.base_url}[/dim]")
+
+    console.print()
+
+
+# =============================================================================
+# Proxy Commands
+# =============================================================================
+
+
+@cli.group()
+def proxy() -> None:
+    """LiteLLM proxy server commands."""
+    pass
+
+
+@proxy.command()
+@click.option("--port", default=4000, help="Port to run proxy on")
+@click.option("--host", default="127.0.0.1", help="Host to bind to")
+def start(port: int, host: str) -> None:
+    """Start LiteLLM proxy server (foreground).
+
+    Runs a local LiteLLM Gateway that forwards OAuth tokens to Anthropic,
+    enabling Claude Max subscription usage with cost tracking.
+    """
+    import subprocess
+    import tempfile
+
+    import yaml
+    from rich.console import Console
+
+    console = Console()
+
+    # Generate LiteLLM config
+    config = {
+        "model_list": [
+            {
+                "model_name": "anthropic-claude",
+                "litellm_params": {
+                    "model": "anthropic/claude-sonnet-4-20250514",
+                },
+            },
+            {
+                "model_name": "claude-sonnet-4-20250514",
+                "litellm_params": {
+                    "model": "anthropic/claude-sonnet-4-20250514",
+                },
+            },
+            {
+                "model_name": "claude-3-5-haiku-20241022",
+                "litellm_params": {
+                    "model": "anthropic/claude-3-5-haiku-20241022",
+                },
+            },
+        ],
+        "general_settings": {
+            "forward_client_headers_to_llm_api": True,
+        },
+        "litellm_settings": {
+            "drop_params": True,
+        },
+    }
+
+    # Write temp config
+    config_dir = Path(tempfile.gettempdir()) / "chapgent"
+    config_dir.mkdir(exist_ok=True)
+    config_path = config_dir / "litellm-proxy.yaml"
+
+    with open(config_path, "w") as f:
+        yaml.dump(config, f)
+
+    console.print("\n[bold]Starting LiteLLM Proxy[/bold]\n")
+    console.print(f"Config: {config_path}")
+    console.print(f"URL:    http://{host}:{port}\n")
+    console.print("[dim]Configure chapgent to use this proxy:[/dim]")
+    console.print(f"  export CHAPGENT_BASE_URL=http://{host}:{port}")
+    console.print(f"  export ANTHROPIC_BASE_URL=http://{host}:{port}\n")
+    console.print("[dim]Press Ctrl+C to stop[/dim]\n")
+    console.print("-" * 50)
+
+    try:
+        subprocess.run(
+            ["litellm", "--config", str(config_path), "--host", host, "--port", str(port)],
+            check=True,
+        )
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Proxy stopped[/yellow]")
+    except FileNotFoundError:
+        console.print("[red]Error: litellm CLI not found. Install with: pip install litellm[proxy][/red]")
+        raise SystemExit(1)
+
+
+@proxy.command("setup")
+def proxy_setup() -> None:
+    """Interactive setup wizard for LiteLLM proxy configuration.
+
+    Guides you through configuring chapgent to use a LiteLLM proxy
+    for cost tracking, budget controls, and Claude Max subscription support.
+    """
+    import json
+
+    from rich.console import Console
+
+    from chapgent.config.writer import save_config_value
+    from chapgent.ux.first_run import (
+        check_proxy_setup_status,
+        get_proxy_setup_instructions,
+        get_proxy_welcome_message,
+        validate_proxy_url,
+    )
+
+    console = Console()
+    status = check_proxy_setup_status()
+
+    # Show welcome message
+    console.print(get_proxy_welcome_message())
+
+    # Show current status
+    if status.has_proxy_url:
+        console.print(f"[green]✓ Proxy URL already configured: {status.proxy_url}[/green]")
+    if status.has_oauth_token:
+        console.print("[green]✓ OAuth token already configured[/green]")
+    if status.has_litellm_key:
+        console.print("[green]✓ LiteLLM API key already configured[/green]")
+
+    if status.has_proxy_url and status.has_oauth_token:
+        console.print("\n[bold]You're already set up![/bold]")
+        if not click.confirm("\nWould you like to reconfigure?", default=False):
+            console.print("\nRun 'chapgent chat' to start chatting.")
+            return
+
+    console.print()
+
+    # Step 1: Choose setup mode
+    console.print("[bold]Step 1: Choose proxy mode[/bold]")
+    console.print("  1. Local proxy (run LiteLLM proxy on your machine)")
+    console.print("  2. Remote proxy (connect to an existing proxy)")
+    console.print()
+
+    mode_choice = click.prompt(
+        "Enter your choice",
+        type=click.Choice(["1", "2"]),
+        default="1",
+    )
+
+    if mode_choice == "1":
+        # Local proxy setup
+        port = click.prompt("Port for local proxy", default=4000, type=int)
+        base_url = f"http://localhost:{port}"
+        console.print(f"\n[dim]To start the proxy, run:[/dim]")
+        console.print(f"  chapgent proxy start --port {port}")
+        console.print()
+    else:
+        # Remote proxy setup
+        console.print()
+        base_url = click.prompt("Proxy URL", default="http://localhost:4000")
+        is_valid, msg = validate_proxy_url(base_url)
+        if not is_valid:
+            console.print(f"[yellow]Warning: {msg}[/yellow]")
+
+    # Step 2: LiteLLM API key (optional)
+    console.print("\n[bold]Step 2: LiteLLM API key (optional)[/bold]")
+    console.print("If your proxy requires authentication, enter the LiteLLM API key.")
+    console.print("This is used for cost tracking and budget controls.")
+    console.print()
+
+    if click.confirm("Configure LiteLLM API key?", default=False):
+        litellm_key = click.prompt("LiteLLM API key", hide_input=True)
+        headers = {"x-litellm-api-key": f"Bearer {litellm_key}"}
+        try:
+            save_config_value("llm.extra_headers", json.dumps(headers), project=False)
+            console.print("[green]✓ LiteLLM API key saved[/green]")
+        except ConfigWriteError as e:
+            console.print(f"[red]Error saving headers: {e}[/red]")
+
+    # Step 3: OAuth token for Claude Max
+    console.print("\n[bold]Step 3: Claude Max OAuth token[/bold]")
+    console.print("To use your Claude Max subscription instead of per-token API pricing,")
+    console.print("you need to authenticate with your Anthropic account.")
+    console.print()
+
+    if click.confirm("Configure Claude Max OAuth token?", default=True):
+        console.print("\nTo get your OAuth token:")
+        console.print("  1. Go to https://console.anthropic.com/oauth/authorize")
+        console.print("  2. Authorize the application")
+        console.print("  3. Copy the token from the success page")
+        console.print()
+
+        if click.confirm("Open OAuth URL in browser?", default=True):
+            import webbrowser
+
+            webbrowser.open("https://console.anthropic.com/oauth/authorize")
+
+        console.print()
+        token = click.prompt("Paste your OAuth token", hide_input=True)
+
+        if token and len(token) >= 20:
+            try:
+                save_config_value("llm.oauth_token", token, project=False)
+                console.print("[green]✓ OAuth token saved[/green]")
+            except ConfigWriteError as e:
+                console.print(f"[red]Error saving token: {e}[/red]")
+        else:
+            console.print("[yellow]Token appears invalid, skipping[/yellow]")
+
+    # Step 4: Save base_url
+    console.print("\n[bold]Step 4: Save proxy configuration[/bold]")
+    try:
+        config_path, _ = save_config_value("llm.base_url", base_url, project=False)
+        console.print(f"[green]✓ Proxy URL saved: {base_url}[/green]")
+    except ConfigWriteError as e:
+        console.print(f"[red]Error saving proxy URL: {e}[/red]")
+        raise SystemExit(1)
+
+    # Summary
+    console.print("\n" + "=" * 60)
+    console.print("[bold green]Proxy Setup Complete![/bold green]")
+    console.print("=" * 60)
+    console.print(f"\nProxy URL: {base_url}")
+    console.print(f"Config: {config_path}")
+
+    if mode_choice == "1":
+        console.print("\n[bold]Next steps:[/bold]")
+        console.print(f"  1. Start the proxy: chapgent proxy start --port {port}")
+        console.print("  2. In another terminal: chapgent chat")
+    else:
+        console.print("\n[bold]Next steps:[/bold]")
+        console.print("  1. Ensure your remote proxy is running")
+        console.print("  2. Run: chapgent chat")
+
+    console.print("\nFor more help: chapgent help proxy")
 
 
 if __name__ == "__main__":

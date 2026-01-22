@@ -121,12 +121,18 @@ class LLMSettings(BaseModel):
             trigger a warning but are allowed for flexibility.
         max_tokens: Maximum tokens in response. Must be between 1 and 100000.
         api_key: API key for the provider. Falls back to environment variable.
+        base_url: Custom API endpoint (e.g., LiteLLM proxy URL).
+        extra_headers: Additional HTTP headers to send with requests.
+        oauth_token: OAuth token for Claude Max subscription authentication.
     """
 
     provider: str = "anthropic"
     model: str = "claude-sonnet-4-20250514"
     max_tokens: int = 4096
     api_key: str | None = None  # Falls back to env var
+    base_url: str | None = None  # Custom API endpoint (e.g., LiteLLM proxy)
+    extra_headers: dict[str, str] | None = None  # Additional HTTP headers
+    oauth_token: str | None = None  # Claude Max OAuth token
 
     @field_validator("provider")
     @classmethod
@@ -162,6 +168,47 @@ class LLMSettings(BaseModel):
             raise ValueError(
                 "api_key cannot be an empty string. "
                 "Either provide a valid key or omit the setting to use environment variables."
+            )
+        return v
+
+    @field_validator("base_url")
+    @classmethod
+    def validate_base_url(cls, v: str | None) -> str | None:
+        """Validate that base_url is a valid URL if provided."""
+        if v is not None:
+            v = v.strip()
+            if v == "":
+                raise ValueError(
+                    "base_url cannot be an empty string. "
+                    "Either provide a valid URL or omit the setting."
+                )
+            if not (v.startswith("http://") or v.startswith("https://")):
+                raise ValueError(
+                    f"base_url must start with http:// or https://, got: {v}"
+                )
+        return v
+
+    @field_validator("extra_headers")
+    @classmethod
+    def validate_extra_headers(cls, v: dict[str, str] | None) -> dict[str, str] | None:
+        """Validate that extra_headers contains only string keys and values."""
+        if v is not None:
+            for key, value in v.items():
+                if not isinstance(key, str) or not isinstance(value, str):
+                    raise ValueError(
+                        f"extra_headers must have string keys and values. "
+                        f"Got key={type(key).__name__}, value={type(value).__name__}"
+                    )
+        return v
+
+    @field_validator("oauth_token")
+    @classmethod
+    def validate_oauth_token(cls, v: str | None) -> str | None:
+        """Validate that oauth_token is not an empty string."""
+        if v is not None and v.strip() == "":
+            raise ValueError(
+                "oauth_token cannot be an empty string. "
+                "Either provide a valid token or omit the setting."
             )
         return v
 

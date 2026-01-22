@@ -327,3 +327,164 @@ def has_completed_first_run() -> bool:
     """
     marker_path = Path.home() / ".local" / "share" / "chapgent" / ".first_run_complete"
     return marker_path.exists()
+
+
+# =============================================================================
+# LiteLLM Proxy Setup
+# =============================================================================
+
+
+@dataclass
+class ProxySetupStatus:
+    """Status of LiteLLM proxy setup.
+
+    Attributes:
+        needs_proxy_setup: True if proxy setup is recommended.
+        has_proxy_url: True if a proxy URL is configured.
+        has_litellm_key: True if a LiteLLM API key is configured in headers.
+        has_oauth_token: True if an OAuth token is configured.
+        proxy_url: The configured proxy URL, if any.
+        missing_items: List of items that could be configured.
+    """
+
+    needs_proxy_setup: bool
+    has_proxy_url: bool
+    has_litellm_key: bool
+    has_oauth_token: bool
+    proxy_url: str | None
+    missing_items: list[str]
+
+
+def check_proxy_setup_status() -> ProxySetupStatus:
+    """Check the current proxy setup status.
+
+    Returns:
+        ProxySetupStatus with details about what's configured.
+    """
+    # Check for proxy URL in env vars
+    proxy_url = os.environ.get("CHAPGENT_BASE_URL") or os.environ.get("ANTHROPIC_BASE_URL")
+    has_proxy_url = bool(proxy_url)
+
+    # Check for LiteLLM key in extra headers
+    extra_headers = os.environ.get("CHAPGENT_EXTRA_HEADERS") or os.environ.get("ANTHROPIC_CUSTOM_HEADERS")
+    has_litellm_key = False
+    if extra_headers:
+        has_litellm_key = "litellm" in extra_headers.lower()
+
+    # Check for OAuth token
+    oauth_token = os.environ.get("CHAPGENT_OAUTH_TOKEN") or os.environ.get("ANTHROPIC_OAUTH_TOKEN")
+    has_oauth_token = bool(oauth_token)
+
+    missing = []
+    if not has_proxy_url:
+        missing.append("Proxy URL (base_url)")
+    if not has_oauth_token:
+        missing.append("OAuth token (for Claude Max)")
+
+    # Recommend proxy setup if using neither proxy nor having direct API key
+    needs_setup = not has_proxy_url and not check_api_key()
+
+    return ProxySetupStatus(
+        needs_proxy_setup=needs_setup,
+        has_proxy_url=has_proxy_url,
+        has_litellm_key=has_litellm_key,
+        has_oauth_token=has_oauth_token,
+        proxy_url=proxy_url,
+        missing_items=missing,
+    )
+
+
+def get_proxy_welcome_message() -> str:
+    """Get the welcome message for proxy setup.
+
+    Returns:
+        Formatted welcome message string.
+    """
+    return """\
+================================================================================
+                    LiteLLM Proxy Setup
+================================================================================
+
+LiteLLM Proxy enables powerful features for your AI coding workflow:
+
+  - Cost Tracking: Monitor spending per user, team, or project
+  - Budget Controls: Set spending limits and rate limits
+  - Claude Max Support: Use your Claude Max subscription instead of API tokens
+  - Guardrails: Apply content filtering and safety controls
+
+================================================================================
+"""
+
+
+def get_proxy_setup_instructions() -> str:
+    """Get setup instructions for proxy configuration.
+
+    Returns:
+        Formatted setup instructions.
+    """
+    return """\
+Proxy Setup Options
+===================
+
+OPTION 1: Local Proxy (Recommended for personal use)
+----------------------------------------------------
+Run the built-in LiteLLM proxy:
+
+  chapgent proxy start --port 4000
+
+Then configure chapgent to use it:
+
+  export CHAPGENT_BASE_URL=http://localhost:4000
+
+OPTION 2: Remote Proxy (For teams/enterprise)
+---------------------------------------------
+Connect to an existing LiteLLM proxy:
+
+  export CHAPGENT_BASE_URL=https://your-proxy.example.com
+
+If the proxy requires authentication:
+
+  export CHAPGENT_EXTRA_HEADERS='{"x-litellm-api-key":"Bearer sk-your-key"}'
+
+CLAUDE MAX SUBSCRIPTION
+-----------------------
+To use Claude Max instead of per-token API pricing:
+
+  1. Run: chapgent auth login
+  2. Follow the OAuth flow to authenticate
+  3. Your Max subscription will be used for all requests
+
+For more information:
+  chapgent help proxy
+  https://docs.litellm.ai/docs/tutorials/claude_code_max_subscription
+"""
+
+
+def validate_proxy_url(url: str) -> tuple[bool, str]:
+    """Validate a proxy URL.
+
+    Args:
+        url: The URL to validate.
+
+    Returns:
+        Tuple of (is_valid, message).
+    """
+    url = url.strip()
+
+    if not url:
+        return False, "URL cannot be empty"
+
+    if not (url.startswith("http://") or url.startswith("https://")):
+        return False, "URL must start with http:// or https://"
+
+    # Basic format validation
+    if "://" in url:
+        _, rest = url.split("://", 1)
+        if not rest or "/" == rest:
+            return False, "URL must include a host"
+
+    # Check for common mistakes
+    if url.endswith("/"):
+        return True, "URL looks valid (note: trailing slash will be used as-is)"
+
+    return True, "URL format looks valid"

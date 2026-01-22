@@ -198,3 +198,118 @@ async def test_complete_multiple_tool_calls():
         assert isinstance(response.content[2], ToolUseBlock)
         assert response.content[1].input == {"path": "a.txt"}
         assert response.content[2].input == {"path": "b.txt"}
+
+
+# =============================================================================
+# LiteLLM Gateway / Proxy Support Tests
+# =============================================================================
+
+
+class TestLLMProviderGatewaySupport:
+    """Tests for LiteLLM Gateway / base_url / extra_headers support."""
+
+    def _mock_response(self):
+        """Create a mock LiteLLM response."""
+        response = AsyncMock()
+        response.choices = [
+            AsyncMock(
+                finish_reason="stop",
+                message=AsyncMock(content="Test response", tool_calls=None),
+            )
+        ]
+        response.usage = AsyncMock()
+        response.usage.prompt_tokens = 10
+        response.usage.completion_tokens = 5
+        response.usage.total_tokens = 15
+        return response
+
+    @pytest.mark.asyncio
+    async def test_base_url_passed_to_litellm(self):
+        """Verify base_url is passed as api_base to litellm."""
+        provider = LLMProvider(
+            model="test-model",
+            api_key="test-key",
+            base_url="http://localhost:4000",
+        )
+
+        with patch("chapgent.core.providers.litellm.acompletion", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = self._mock_response()
+
+            await provider.complete(
+                messages=[{"role": "user", "content": "test"}],
+                tools=[],
+            )
+
+            mock_complete.assert_called_once()
+            call_kwargs = mock_complete.call_args.kwargs
+            assert call_kwargs["api_base"] == "http://localhost:4000"
+
+    @pytest.mark.asyncio
+    async def test_extra_headers_passed_to_litellm(self):
+        """Verify extra_headers are passed to litellm."""
+        headers = {"x-litellm-api-key": "Bearer sk-test", "x-custom": "value"}
+        provider = LLMProvider(
+            model="test-model",
+            extra_headers=headers,
+        )
+
+        with patch("chapgent.core.providers.litellm.acompletion", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = self._mock_response()
+
+            await provider.complete(
+                messages=[{"role": "user", "content": "test"}],
+                tools=[],
+            )
+
+            call_kwargs = mock_complete.call_args.kwargs
+            assert call_kwargs["extra_headers"] == headers
+
+    @pytest.mark.asyncio
+    async def test_none_values_passed_correctly(self):
+        """Verify None values for base_url and extra_headers are passed."""
+        provider = LLMProvider(model="test-model")
+
+        with patch("chapgent.core.providers.litellm.acompletion", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = self._mock_response()
+
+            await provider.complete(
+                messages=[{"role": "user", "content": "test"}],
+                tools=[],
+            )
+
+            call_kwargs = mock_complete.call_args.kwargs
+            assert call_kwargs.get("api_base") is None
+            assert call_kwargs.get("extra_headers") is None
+
+    @pytest.mark.asyncio
+    async def test_full_gateway_config(self):
+        """Test provider with full gateway configuration."""
+        provider = LLMProvider(
+            model="anthropic-claude",
+            api_key="sk-test-key",
+            base_url="http://localhost:4000",
+            extra_headers={
+                "x-litellm-api-key": "Bearer sk-litellm",
+                "Authorization": "Bearer oauth-token",
+            },
+        )
+
+        with patch("chapgent.core.providers.litellm.acompletion", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = self._mock_response()
+
+            response = await provider.complete(
+                messages=[{"role": "user", "content": "test"}],
+                tools=[],
+            )
+
+            # Verify response is still parsed correctly
+            assert isinstance(response, LLMResponse)
+            assert len(response.content) == 1
+            assert isinstance(response.content[0], TextBlock)
+
+            # Verify all params passed correctly
+            call_kwargs = mock_complete.call_args.kwargs
+            assert call_kwargs["model"] == "anthropic-claude"
+            assert call_kwargs["api_key"] == "sk-test-key"
+            assert call_kwargs["api_base"] == "http://localhost:4000"
+            assert call_kwargs["extra_headers"]["x-litellm-api-key"] == "Bearer sk-litellm"

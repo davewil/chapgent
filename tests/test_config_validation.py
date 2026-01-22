@@ -126,6 +126,62 @@ class TestLLMSettingsValidation:
         default_settings = LLMSettings()
         assert default_settings.model == LLMSettings.model_fields["model"].default
 
+    # -------------------------------------------------------------------------
+    # base_url validation
+    # -------------------------------------------------------------------------
+
+    @pytest.mark.parametrize("base_url", [None, "http://localhost:4000", "https://proxy.example.com"])
+    def test_valid_base_url(self, base_url: str | None):
+        """Should accept None or valid URL strings."""
+        assert LLMSettings(base_url=base_url).base_url == base_url
+
+    @pytest.mark.parametrize(
+        "base_url,error_substring",
+        [
+            ("", "empty string"),
+            ("   ", "empty string"),
+            ("localhost:4000", "must start with http"),
+            ("ftp://proxy.example.com", "must start with http"),
+        ],
+    )
+    def test_invalid_base_url(self, base_url: str, error_substring: str):
+        """Should reject invalid base_url values."""
+        with pytest.raises(ValidationError) as exc_info:
+            LLMSettings(base_url=base_url)
+        assert error_substring in str(exc_info.value)
+
+    # -------------------------------------------------------------------------
+    # extra_headers validation
+    # -------------------------------------------------------------------------
+
+    @pytest.mark.parametrize(
+        "extra_headers",
+        [
+            None,
+            {"x-api-key": "test"},
+            {"x-litellm-api-key": "Bearer sk-test", "Authorization": "Bearer oauth"},
+        ],
+    )
+    def test_valid_extra_headers(self, extra_headers: dict[str, str] | None):
+        """Should accept None or valid header dicts."""
+        assert LLMSettings(extra_headers=extra_headers).extra_headers == extra_headers
+
+    # -------------------------------------------------------------------------
+    # oauth_token validation
+    # -------------------------------------------------------------------------
+
+    @pytest.mark.parametrize("oauth_token", [None, "oauth-token-12345"])
+    def test_valid_oauth_token(self, oauth_token: str | None):
+        """Should accept None or valid oauth_token strings."""
+        assert LLMSettings(oauth_token=oauth_token).oauth_token == oauth_token
+
+    @pytest.mark.parametrize("oauth_token", ["", "   "])
+    def test_invalid_oauth_token(self, oauth_token: str):
+        """Should reject empty or whitespace-only oauth_token."""
+        with pytest.raises(ValidationError) as exc_info:
+            LLMSettings(oauth_token=oauth_token)
+        assert "empty string" in str(exc_info.value)
+
 
 # =============================================================================
 # Test TUISettings Validation (Consolidated)

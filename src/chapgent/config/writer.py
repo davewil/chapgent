@@ -38,6 +38,9 @@ VALID_CONFIG_KEYS: frozenset[str] = frozenset(
         "llm.model",
         "llm.max_tokens",
         "llm.api_key",
+        "llm.base_url",
+        "llm.extra_headers",
+        "llm.oauth_token",
         "permissions.auto_approve_low_risk",
         "permissions.session_override_allowed",
         "tui.theme",
@@ -64,7 +67,7 @@ def get_config_paths() -> tuple[Path, Path]:
     return user_config, project_config
 
 
-def convert_value(key: str, value: str) -> str | int | bool:
+def convert_value(key: str, value: str) -> str | int | bool | dict[str, str]:
     """Convert a string value to the appropriate type for the given key.
 
     Args:
@@ -72,7 +75,7 @@ def convert_value(key: str, value: str) -> str | int | bool:
         value: The string value to convert.
 
     Returns:
-        The converted value (str, int, or bool).
+        The converted value (str, int, bool, or dict).
 
     Raises:
         ConfigWriteError: If the value cannot be converted or is invalid.
@@ -98,6 +101,22 @@ def convert_value(key: str, value: str) -> str | int | bool:
             return False
         raise ConfigWriteError(f"Invalid boolean value for {key}: {value}. Use true/false.")
 
+    # JSON dict fields
+    if key == "llm.extra_headers":
+        import json
+
+        try:
+            parsed = json.loads(value)
+            if not isinstance(parsed, dict):
+                raise ConfigWriteError(f"Invalid JSON for {key}: expected a dict, got {type(parsed).__name__}")
+            # Validate all keys and values are strings
+            for k, v in parsed.items():
+                if not isinstance(k, str) or not isinstance(v, str):
+                    raise ConfigWriteError(f"Invalid JSON for {key}: all keys and values must be strings")
+            return parsed
+        except json.JSONDecodeError as e:
+            raise ConfigWriteError(f"Invalid JSON for {key}: {e}") from None
+
     # Validate mode values
     if key == "system_prompt.mode":
         if value not in ("replace", "append"):
@@ -110,10 +129,15 @@ def convert_value(key: str, value: str) -> str | int | bool:
             raise ConfigWriteError(f"Invalid log level: {value}. Valid levels are: DEBUG, INFO, WARNING, ERROR")
         return value.upper()  # Normalize to uppercase
 
+    # Validate URL format for base_url
+    if key == "llm.base_url":
+        if value and not (value.startswith("http://") or value.startswith("https://")):
+            raise ConfigWriteError(f"Invalid URL for {key}: must start with http:// or https://")
+
     return value
 
 
-def format_toml_value(value: str | int | bool) -> str:
+def format_toml_value(value: str | int | bool | dict[str, str]) -> str:
     """Format a value for TOML output.
 
     Args:
@@ -126,6 +150,13 @@ def format_toml_value(value: str | int | bool) -> str:
         return "true" if value else "false"
     if isinstance(value, int):
         return str(value)
+    if isinstance(value, dict):
+        # Format as inline TOML table: { key = "value", ... }
+        items = []
+        for k, v in sorted(value.items()):
+            escaped_v = v.replace("\\", "\\\\").replace('"', '\\"')
+            items.append(f'"{k}" = "{escaped_v}"')
+        return "{ " + ", ".join(items) + " }"
     # String - escape quotes and wrap in quotes
     escaped = value.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'

@@ -203,11 +203,20 @@ class LLMProvider:
     """Wrapper around litellm for LLM interactions.
 
     Provides a clean async interface and handles tool formatting.
+    Supports custom base URLs and headers for LiteLLM proxy/gateway support.
     """
 
-    def __init__(self, model: str, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        model: str,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        extra_headers: dict[str, str] | None = None,
+    ) -> None:
         self.model = model
         self.api_key = api_key
+        self.base_url = base_url
+        self.extra_headers = extra_headers
 
     async def complete(
         self,
@@ -243,6 +252,8 @@ class LLMProvider:
         response = await litellm.acompletion(
             model=self.model,
             api_key=self.api_key,
+            api_base=self.base_url,
+            extra_headers=self.extra_headers,
             messages=messages,
             tools=formatted_tools,
             max_tokens=max_tokens,

@@ -18,13 +18,29 @@ ENV_MAPPINGS: dict[str, str] = {
     "CHAPGENT_API_KEY": "llm.api_key",
     "CHAPGENT_MAX_TOKENS": "llm.max_tokens",
     "CHAPGENT_PROVIDER": "llm.provider",
+    "CHAPGENT_BASE_URL": "llm.base_url",
+    "CHAPGENT_EXTRA_HEADERS": "llm.extra_headers",
+    "CHAPGENT_OAUTH_TOKEN": "llm.oauth_token",
     # Standard API key env vars (fallback for api_key)
     "ANTHROPIC_API_KEY": "llm.api_key",
     "OPENAI_API_KEY": "llm.api_key",
+    # Anthropic-compatible env vars (for Claude Code Max subscription)
+    "ANTHROPIC_BASE_URL": "llm.base_url",
+    "ANTHROPIC_CUSTOM_HEADERS": "llm.extra_headers",
+    "ANTHROPIC_OAUTH_TOKEN": "llm.oauth_token",
 }
 
 # Priority order for API key env vars (first found wins)
 API_KEY_ENV_PRIORITY = ["CHAPGENT_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
+
+# Priority order for base_url env vars (first found wins)
+BASE_URL_ENV_PRIORITY = ["CHAPGENT_BASE_URL", "ANTHROPIC_BASE_URL"]
+
+# Priority order for extra_headers env vars (first found wins)
+EXTRA_HEADERS_ENV_PRIORITY = ["CHAPGENT_EXTRA_HEADERS", "ANTHROPIC_CUSTOM_HEADERS"]
+
+# Priority order for oauth_token env vars (first found wins)
+OAUTH_TOKEN_ENV_PRIORITY = ["CHAPGENT_OAUTH_TOKEN", "ANTHROPIC_OAUTH_TOKEN"]
 
 
 def _deep_update(base: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:
@@ -66,7 +82,7 @@ def _convert_env_value(value: str, path: str) -> Any:
         path: The config path (used to determine expected type).
 
     Returns:
-        Converted value (int, bool, or str).
+        Converted value (int, bool, dict, or str).
     """
     # Integer fields
     if path.endswith(".max_tokens"):
@@ -84,6 +100,17 @@ def _convert_env_value(value: str, path: str) -> Any:
     }
     if path in bool_paths:
         return value.lower() in ("true", "1", "yes", "on")
+
+    # JSON dict fields (extra_headers)
+    if path.endswith(".extra_headers"):
+        import json
+
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass  # Fall through to return as string
 
     # Default to string
     return value
@@ -104,10 +131,17 @@ def _load_env_config() -> dict[str, Any]:
             _set_nested_value(env_config, "llm.api_key", value)
             break
 
-    # Handle other env vars (excluding API key vars already handled)
-    api_key_vars = set(API_KEY_ENV_PRIORITY)
+    # Handle OAuth token with priority
+    for env_var in OAUTH_TOKEN_ENV_PRIORITY:
+        value = os.environ.get(env_var)
+        if value:
+            _set_nested_value(env_config, "llm.oauth_token", value)
+            break
+
+    # Handle other env vars (excluding API key and OAuth token vars already handled)
+    priority_handled_vars = set(API_KEY_ENV_PRIORITY) | set(OAUTH_TOKEN_ENV_PRIORITY)
     for env_var, path in ENV_MAPPINGS.items():
-        if env_var in api_key_vars:
+        if env_var in priority_handled_vars:
             continue  # Already handled above with priority
 
         value = os.environ.get(env_var)
