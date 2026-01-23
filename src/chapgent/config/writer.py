@@ -36,6 +36,7 @@ VALID_CONFIG_KEYS: frozenset[str] = frozenset(
     {
         "llm.provider",
         "llm.model",
+        "llm.auth_mode",
         "llm.max_output_tokens",
         "llm.api_key",
         "llm.base_url",
