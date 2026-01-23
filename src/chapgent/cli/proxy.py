@@ -1,111 +1,20 @@
 """LiteLLM proxy commands."""
 
 import json
-import shutil
 import subprocess
-import sys
-import tempfile
 from pathlib import Path
 
 import click
-import yaml  # type: ignore[import-untyped]
 from rich.console import Console
 
 from chapgent.cli.main import cli
 from chapgent.config.writer import ConfigWriteError, save_config_value
+from chapgent.core.proxy import find_litellm_binary, write_proxy_config
 from chapgent.ux.first_run import (
     check_proxy_setup_status,
     get_proxy_welcome_message,
     validate_proxy_url,
 )
-
-# Default proxy settings
-DEFAULT_PROXY_HOST = "127.0.0.1"
-DEFAULT_PROXY_PORT = 4000
-
-
-def _is_proxy_running(host: str = DEFAULT_PROXY_HOST, port: int = DEFAULT_PROXY_PORT) -> bool:
-    """Check if proxy is already running by trying to connect."""
-    import socket
-
-    try:
-        with socket.create_connection((host, port), timeout=1):
-            return True
-    except (ConnectionRefusedError, OSError, TimeoutError):
-        return False
-
-
-def _start_proxy_background(host: str = DEFAULT_PROXY_HOST, port: int = DEFAULT_PROXY_PORT) -> bool:
-    """Start the LiteLLM proxy in the background.
-
-    Returns True if proxy started successfully, False otherwise.
-    """
-    import os
-    import time
-
-    # Generate LiteLLM config
-    config = {
-        "model_list": [
-            {
-                "model_name": "anthropic-claude",
-                "litellm_params": {"model": "anthropic/claude-sonnet-4-20250514"},
-            },
-            {
-                "model_name": "claude-sonnet-4-20250514",
-                "litellm_params": {"model": "anthropic/claude-sonnet-4-20250514"},
-            },
-            {
-                "model_name": "claude-3-5-haiku-20241022",
-                "litellm_params": {"model": "anthropic/claude-3-5-haiku-20241022"},
-            },
-        ],
-        "general_settings": {"forward_client_headers_to_llm_api": True},
-        "litellm_settings": {"drop_params": True},
-    }
-
-    # Write config file
-    config_dir = Path(tempfile.gettempdir()) / "chapgent"
-    config_dir.mkdir(exist_ok=True)
-    config_path = config_dir / "litellm-proxy.yaml"
-
-    with open(config_path, "w") as f:
-        yaml.dump(config, f)
-
-    # Start proxy in background
-    # Find litellm binary - check venv first, then system PATH
-    venv_litellm = Path(sys.executable).parent / "litellm"
-    if venv_litellm.exists():
-        litellm_cmd = str(venv_litellm)
-    else:
-        found_litellm = shutil.which("litellm")
-        if not found_litellm:
-            return False
-        litellm_cmd = found_litellm
-
-    try:
-        # LiteLLM requires ANTHROPIC_API_KEY env var even when using OAuth via proxy.
-        # The actual auth comes from the forwarded Authorization header, but the proxy
-        # needs this env var to initialize. We use a placeholder value.
-        env = os.environ.copy()
-        env["ANTHROPIC_API_KEY"] = env.get("ANTHROPIC_API_KEY", "placeholder-for-oauth-proxy")
-
-        subprocess.Popen(
-            [litellm_cmd, "--config", str(config_path), "--host", host, "--port", str(port)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,  # Detach from parent process
-            env=env,
-        )
-    except FileNotFoundError:
-        return False
-
-    # Wait for proxy to be ready (up to 10 seconds)
-    for _ in range(20):
-        time.sleep(0.5)
-        if _is_proxy_running(host, port):
-            return True
-
-    return False
 
 
 @cli.group()
@@ -141,54 +50,14 @@ def start(port: int, host: str, no_configure: bool) -> None:
             console.print("[dim]You can manually set it with:[/dim]")
             console.print(f"  chapgent config set llm.base_url {proxy_url}\n")
 
-    # Generate LiteLLM config
-    config = {
-        "model_list": [
-            {
-                "model_name": "anthropic-claude",
-                "litellm_params": {
-                    "model": "anthropic/claude-sonnet-4-20250514",
-                },
-            },
-            {
-                "model_name": "claude-sonnet-4-20250514",
-                "litellm_params": {
-                    "model": "anthropic/claude-sonnet-4-20250514",
-                },
-            },
-            {
-                "model_name": "claude-3-5-haiku-20241022",
-                "litellm_params": {
-                    "model": "anthropic/claude-3-5-haiku-20241022",
-                },
-            },
-        ],
-        "general_settings": {
-            "forward_client_headers_to_llm_api": True,
-        },
-        "litellm_settings": {
-            "drop_params": True,
-        },
-    }
+    # Write proxy config using shared utilities
+    config_path = write_proxy_config()
 
-    # Write temp config
-    config_dir = Path(tempfile.gettempdir()) / "chapgent"
-    config_dir.mkdir(exist_ok=True)
-    config_path = config_dir / "litellm-proxy.yaml"
-
-    with open(config_path, "w") as f:
-        yaml.dump(config, f)
-
-    # Find litellm binary - check venv first, then system PATH
-    venv_litellm = Path(sys.executable).parent / "litellm"
-    if venv_litellm.exists():
-        litellm_cmd = str(venv_litellm)
-    else:
-        found_litellm = shutil.which("litellm")
-        if not found_litellm:
-            console.print("[red]Error: litellm CLI not found. Install with: pip install 'litellm[proxy]'[/red]")
-            raise SystemExit(1)
-        litellm_cmd = found_litellm
+    # Find litellm binary
+    litellm_cmd = find_litellm_binary()
+    if not litellm_cmd:
+        console.print("[red]Error: litellm CLI not found. Install with: pip install 'litellm[proxy]'[/red]")
+        raise SystemExit(1)
 
     console.print("[bold]Starting LiteLLM Proxy[/bold]\n")
     console.print(f"Config: {config_path}")
@@ -354,4 +223,4 @@ def proxy_setup() -> None:
     console.print("\nFor more help: chapgent help proxy")
 
 
-__all__ = ["proxy", "DEFAULT_PROXY_HOST", "DEFAULT_PROXY_PORT"]
+__all__ = ["proxy"]
