@@ -1713,3 +1713,37 @@
   - Learned: Separate validation logic by mode makes error messages clearer for users
   - Learned: CLI flag override allows per-session mode switching without config changes
   - Total: 1590 tests pass
+2026-01-23: Started Phase 8 - Streaming Claude Max Provider (specs/PHASE-8-streaming-claude-max-provider.md):
+  - Created src/chapgent/core/stream_provider.py with StreamingClaudeCodeProvider:
+    * Uses Claude CLI's native --output-format stream-json for real-time streaming
+    * Manages persistent subprocess with stdin/stdout for NDJSON protocol
+    * Stream event dataclasses: TextDelta, ToolCall, ToolResult, PermissionRequest, StreamComplete, StreamError
+    * Permission callback integration: async callback invoked when Claude Code requests permission
+    * Auto-denies permissions if no callback provided (safe default)
+    * Session persistence via session_id property (for --resume)
+    * Context manager support (async with) for clean subprocess lifecycle
+    * Clean subprocess termination with timeout and kill fallback
+  - Error handling improvements:
+    * StreamingClaudeCodeProviderError for subprocess failures (CLI not found, etc.)
+    * StreamError events for stream-level errors with code and retryable flag
+    * Graceful handling of broken pipes and connection resets
+    * Invalid JSON lines silently skipped (robust against protocol variations)
+  - Created tests/test_core/test_stream_provider.py with 16 behavioral tests:
+    * TestTextStreaming: 2 tests (text deltas, empty deltas)
+    * TestToolExecution: 2 tests (tool calls, error results)
+    * TestPermissionHandling: 3 tests (approve, deny, auto-deny)
+    * TestSessionPersistence: 1 test (session ID storage)
+    * TestErrorHandling: 3 tests (CLI not found, stream errors, invalid JSON)
+    * TestProviderLifecycle: 3 tests (context manager, stop, auto-start)
+    * TestPropertyBased: 2 tests (text preservation, tool input preservation)
+  - Learned: asyncio.Queue is perfect for simulating readline() in mock subprocesses
+    * Put lines in queue, readline() returns await queue.get()
+    * Empty bytes b"" signals EOF
+  - Learned: Import AsyncIterator, Awaitable, Callable from collections.abc not typing (ruff UP035)
+  - Learned: With `from __future__ import annotations`, forward references don't need quotes (ruff UP037)
+  - Learned: For behavioral tests, focus on user-visible behavior not implementation details
+    * Test "user receives text deltas" not "parse_event returns TextDelta"
+    * Test "permission callback is invoked" not "internal permission handling logic"
+  - Learned: Mock subprocess pattern: MagicMock for process, AsyncMock for drain(), queue for readline()
+  - Phase 8 Phase 1 complete (StreamingClaudeCodeProvider foundation)
+  - Total: 1606 tests pass (16 new streaming provider tests)

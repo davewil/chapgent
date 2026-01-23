@@ -379,3 +379,46 @@ async def claude_code_permission_callback(tool: str, args: dict) -> bool:
 1. **Stream-JSON exact format**: Need to verify actual NDJSON format from `claude --output-format stream-json` (may differ from documented)
 2. **Error handling**: How does Claude Code signal errors in stream mode?
 3. **Cancellation**: How to send cancel signal mid-stream?
+
+## Progress
+
+### Phase 1: StreamingClaudeCodeProvider (COMPLETE)
+
+**Date:** 2026-01-23
+
+Created `src/chapgent/core/stream_provider.py` with:
+
+- **Stream Event Dataclasses:**
+  - `TextDelta`: Streaming text chunks
+  - `ToolCall`: Tool invocation events
+  - `ToolResult`: Tool execution results (with is_error flag)
+  - `PermissionRequest`: Permission requests from Claude Code
+  - `StreamComplete`: Stream finished with session ID and usage
+  - `StreamError`: Error events with code and retryable flag
+
+- **StreamingClaudeCodeProvider Class:**
+  - Manages persistent subprocess with stdin/stdout
+  - Parses NDJSON stream via `_parse_event()`
+  - Yields streaming events via async iterator
+  - Handles permission requests via callback
+  - Auto-denies if no permission callback provided
+  - Session persistence via `session_id` property
+  - Context manager support (`async with`)
+  - Clean subprocess termination with timeout
+
+- **Error Handling:**
+  - `StreamingClaudeCodeProviderError` for subprocess failures
+  - `StreamError` events for stream-level errors
+  - Graceful handling of broken pipes and connection resets
+  - Invalid JSON lines silently skipped
+
+**Tests:** 16 behavioral tests in `tests/test_core/test_stream_provider.py`:
+- TestTextStreaming: 2 tests
+- TestToolExecution: 2 tests
+- TestPermissionHandling: 3 tests
+- TestSessionPersistence: 1 test
+- TestErrorHandling: 3 tests
+- TestProviderLifecycle: 3 tests
+- TestPropertyBased: 2 tests
+
+**Total tests:** 1606 passed
