@@ -49,17 +49,45 @@ async def _init_agent_and_app(
     # 1. Load Config
     settings = await load_config()
 
-    # 2. Initialize Components
+    # 2. Validate authentication configuration
+    if not use_mock:
+        has_api_key = bool(settings.llm.api_key)
+        has_oauth = bool(settings.llm.oauth_token)
+        has_base_url = bool(settings.llm.base_url)
+
+        if not has_api_key and not has_oauth:
+            raise click.ClickException(
+                "No authentication configured.\n\n"
+                "Run 'chapgent setup' to configure authentication, or:\n"
+                "  - Set ANTHROPIC_API_KEY environment variable\n"
+                "  - Run 'chapgent config set llm.api_key YOUR_KEY'"
+            )
+
+        if has_oauth and not has_base_url:
+            raise click.ClickException(
+                "OAuth token configured but no proxy URL set.\n\n"
+                "Claude Max requires a LiteLLM proxy. Either:\n"
+                "  1. Start the proxy: chapgent proxy start --port 4000\n"
+                "  2. Set the URL: chapgent config set llm.base_url http://localhost:4000\n\n"
+                "Or run 'chapgent setup' to reconfigure."
+            )
+
+    # 3. Initialize Components
     provider: LLMProvider
     if use_mock:
         provider = MockLLMProvider(delay=0.3)
     else:
-        # Priority: Settings > Env (handled in settings.py)
+        # Build headers - merge extra_headers with OAuth token if present
+        headers = dict(settings.llm.extra_headers) if settings.llm.extra_headers else {}
+        if settings.llm.oauth_token:
+            # OAuth token for Claude Max subscription via LiteLLM proxy
+            headers["Authorization"] = f"Bearer {settings.llm.oauth_token}"
+
         provider = LLMProvider(
             model=settings.llm.model,
             api_key=settings.llm.api_key,
             base_url=settings.llm.base_url,
-            extra_headers=settings.llm.extra_headers,
+            extra_headers=headers if headers else None,
         )
 
     tools = ToolRegistry()
@@ -559,14 +587,13 @@ def help_cmd(topic: str | None) -> None:
 def setup() -> None:
     """Interactive setup for first-time users.
 
-    Guides you through configuring chapgent with your API key
-    and creating a configuration file.
+    Guides you through configuring chapgent with either:
+    - Option 1: Anthropic API key (pay-per-token)
+    - Option 2: Claude Max subscription (unlimited via LiteLLM proxy)
     """
     from chapgent.ux.first_run import (
         check_setup_status,
         format_setup_complete_message,
-        get_api_key_help,
-        get_setup_instructions,
         get_welcome_message,
         validate_api_key_format,
     )
@@ -576,7 +603,7 @@ def setup() -> None:
     # Show welcome message
     click.echo(get_welcome_message())
 
-    # Check if already set up
+    # Check if already fully configured
     if status.has_api_key and status.has_config_file:
         click.echo("You're already set up!")
         click.echo()
@@ -587,64 +614,185 @@ def setup() -> None:
         click.echo("Run 'chapgent chat' to start chatting.")
         return
 
-    # Show what needs to be done
-    click.echo(get_setup_instructions(status))
+    # Present the two options
+    click.echo("How would you like to authenticate?")
+    click.echo()
+    click.echo("  [1] Anthropic API Key (pay-per-token)")
+    click.echo("      - Get a key at https://console.anthropic.com/")
+    click.echo("      - Billed based on usage")
+    click.echo()
+    click.echo("  [2] Claude Max Subscription (unlimited usage)")
+    click.echo("      - Requires Claude Max subscription ($100/month)")
+    click.echo("      - Uses LiteLLM proxy to forward OAuth tokens")
+    click.echo("      - Requires Claude Code CLI for authentication")
     click.echo()
 
-    # Offer to set up API key interactively
-    if not status.has_api_key:
-        if click.confirm("Would you like to set up your API key now?"):
-            click.echo()
-            click.echo(get_api_key_help())
-            click.echo()
+    choice = click.prompt("Choose an option", type=click.Choice(["1", "2"]), default="1")
 
-            api_key = click.prompt("Enter your API key", hide_input=True)
+    user_config, _ = get_config_paths()
+    user_config.parent.mkdir(parents=True, exist_ok=True)
 
-            is_valid, message = validate_api_key_format(api_key)
-            if not is_valid:
-                click.echo(f"Warning: {message}")
-                if not click.confirm("Continue anyway?"):
-                    click.echo("Setup cancelled.")
-                    return
+    import sys
 
-            # Set the API key in config
-            user_config, _ = get_config_paths()
-            user_config.parent.mkdir(parents=True, exist_ok=True)
+    if sys.version_info >= (3, 11):
+        import tomllib
+    else:
+        import tomli as tomllib  # type: ignore[import-not-found,unused-ignore]
 
-            import sys
+    existing: dict[str, Any] = {}
+    if user_config.exists():
+        with open(user_config, "rb") as f:
+            existing = tomllib.load(f)
 
-            if sys.version_info >= (3, 11):
-                import tomllib
-            else:
-                import tomli as tomllib  # type: ignore[import-not-found,unused-ignore]
+    if "llm" not in existing:
+        existing["llm"] = {}
 
-            existing: dict[str, Any] = {}
-            if user_config.exists():
-                with open(user_config, "rb") as f:
-                    existing = tomllib.load(f)
-
-            if "llm" not in existing:
-                existing["llm"] = {}
-            existing["llm"]["api_key"] = api_key
-
-            write_toml(user_config, existing)
-            click.echo(f"API key saved to {user_config}")
-            click.echo()
-
-    # Offer to create config file
-    if not status.has_config_file:
-        if click.confirm("Would you like to create a config file with defaults?"):
-            status.config_path.parent.mkdir(parents=True, exist_ok=True)
-            write_default_config(status.config_path)
-            click.echo(f"Config file created at {status.config_path}")
-            click.echo()
+    if choice == "1":
+        # Option 1: API Key setup
+        _setup_api_key(existing, user_config, validate_api_key_format)
+    else:
+        # Option 2: Claude Max setup
+        _setup_claude_max(existing, user_config)
 
     # Show completion message
+    click.echo()
     try:
         settings = asyncio.run(load_config())
         click.echo(format_setup_complete_message(settings))
     except Exception:
         click.echo(format_setup_complete_message(None))
+
+
+def _setup_api_key(
+    existing: dict[str, Any],
+    user_config: Path,
+    validate_api_key_format: Any,
+) -> None:
+    """Set up authentication using an Anthropic API key."""
+    click.echo()
+    click.echo("=" * 60)
+    click.echo("API Key Setup")
+    click.echo("=" * 60)
+    click.echo()
+    click.echo("Get your API key from: https://console.anthropic.com/")
+    click.echo("Keys start with 'sk-ant-api03-'")
+    click.echo()
+
+    api_key = click.prompt("Enter your Anthropic API key", hide_input=True)
+
+    is_valid, message = validate_api_key_format(api_key)
+    if not is_valid:
+        click.echo(f"Warning: {message}")
+        if not click.confirm("Continue anyway?"):
+            click.echo("Setup cancelled.")
+            return
+
+    existing["llm"]["api_key"] = api_key
+    # Clear any proxy settings that might conflict
+    existing["llm"].pop("base_url", None)
+    existing["llm"].pop("oauth_token", None)
+
+    write_toml(user_config, existing)
+    click.echo()
+    click.echo(f"API key saved to {user_config}")
+    click.echo()
+    click.echo("You're all set! Run 'chapgent chat' to start.")
+
+
+def _setup_claude_max(existing: dict[str, Any], user_config: Path) -> None:
+    """Set up authentication using Claude Max subscription via LiteLLM proxy."""
+    click.echo()
+    click.echo("=" * 60)
+    click.echo("Claude Max Setup")
+    click.echo("=" * 60)
+    click.echo()
+    click.echo("This setup requires:")
+    click.echo("  1. A Claude Max subscription ($100/month)")
+    click.echo("  2. Claude Code CLI installed and logged in")
+    click.echo()
+
+    # Step 1: Check for Claude Code credentials
+    click.echo("Step 1: Import OAuth token from Claude Code")
+    click.echo("-" * 40)
+
+    claude_creds_path = Path.home() / ".claude" / ".credentials.json"
+    if not claude_creds_path.exists():
+        click.echo()
+        click.echo("Claude Code credentials not found!")
+        click.echo()
+        click.echo("Please install and log in to Claude Code first:")
+        click.echo("  1. Install: npm install -g @anthropic-ai/claude-code")
+        click.echo("  2. Run: claude")
+        click.echo("  3. Type: /login")
+        click.echo("  4. Complete the login in your browser")
+        click.echo("  5. Run 'chapgent setup' again")
+        click.echo()
+        return
+
+    # Try to read the OAuth token
+    import json
+
+    try:
+        with open(claude_creds_path) as f:
+            creds = json.load(f)
+
+        # Token can be in different locations depending on Claude Code version
+        oauth_token = (
+            creds.get("accessToken")
+            or creds.get("access_token")
+            or creds.get("claudeAiOauth", {}).get("accessToken")
+        )
+
+        if not oauth_token:
+            click.echo("No OAuth token found in Claude Code credentials.")
+            click.echo("Please run 'claude' and use '/login' to authenticate.")
+            return
+
+        click.echo("Found OAuth token from Claude Code.")
+        existing["llm"]["oauth_token"] = oauth_token
+
+    except Exception as e:
+        click.echo(f"Error reading Claude Code credentials: {e}")
+        return
+
+    # Step 2: Configure proxy URL
+    click.echo()
+    click.echo("Step 2: Configure LiteLLM Proxy")
+    click.echo("-" * 40)
+    click.echo()
+    click.echo("The proxy forwards your OAuth token to Anthropic.")
+    click.echo()
+
+    proxy_choice = click.prompt(
+        "Proxy setup",
+        type=click.Choice(["local", "remote"]),
+        default="local",
+    )
+
+    if proxy_choice == "local":
+        port = click.prompt("Local proxy port", default="4000")
+        base_url = f"http://localhost:{port}"
+        click.echo()
+        click.echo("To start the proxy, run in a separate terminal:")
+        click.echo(f"  chapgent proxy start --port {port}")
+        click.echo()
+    else:
+        base_url = click.prompt("Remote proxy URL", default="http://localhost:4000")
+
+    existing["llm"]["base_url"] = base_url
+    # Clear API key if using OAuth
+    existing["llm"].pop("api_key", None)
+
+    write_toml(user_config, existing)
+    click.echo()
+    click.echo(f"Configuration saved to {user_config}")
+    click.echo()
+    click.echo("Setup complete! To use chapgent:")
+    if proxy_choice == "local":
+        click.echo(f"  1. Start the proxy: chapgent proxy start --port {port}")
+        click.echo("  2. In another terminal: chapgent chat")
+    else:
+        click.echo("  Run: chapgent chat")
 
 
 # =============================================================================
@@ -713,7 +861,7 @@ def login(import_claude_code: bool, token: str | None) -> None:
             console.print("[green]✓ Imported token from Claude Code credentials[/green]")
         except json.JSONDecodeError:
             console.print("[red]Error: Invalid JSON in credentials file[/red]")
-            raise SystemExit(1)
+            raise SystemExit(1) from None
 
     # Option 2: Token provided directly
     elif token:
@@ -745,7 +893,7 @@ def login(import_claude_code: bool, token: str | None) -> None:
 
     try:
         config_path, _ = save_config_value("llm.oauth_token", token, project=False)
-        console.print(f"[green]✓ OAuth token saved successfully![/green]")
+        console.print("[green]✓ OAuth token saved successfully![/green]")
         console.print(f"  Config: {config_path}")
     except ConfigWriteError as e:
         raise click.ClickException(str(e)) from None
@@ -887,7 +1035,7 @@ def start(port: int, host: str) -> None:
         console.print("\n[yellow]Proxy stopped[/yellow]")
     except FileNotFoundError:
         console.print("[red]Error: litellm CLI not found. Install with: pip install litellm[proxy][/red]")
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
 
 @proxy.command("setup")
@@ -904,7 +1052,6 @@ def proxy_setup() -> None:
     from chapgent.config.writer import save_config_value
     from chapgent.ux.first_run import (
         check_proxy_setup_status,
-        get_proxy_setup_instructions,
         get_proxy_welcome_message,
         validate_proxy_url,
     )
@@ -947,7 +1094,7 @@ def proxy_setup() -> None:
         # Local proxy setup
         port = click.prompt("Port for local proxy", default=4000, type=int)
         base_url = f"http://localhost:{port}"
-        console.print(f"\n[dim]To start the proxy, run:[/dim]")
+        console.print("\n[dim]To start the proxy, run:[/dim]")
         console.print(f"  chapgent proxy start --port {port}")
         console.print()
     else:
@@ -1028,7 +1175,7 @@ def proxy_setup() -> None:
         console.print(f"[green]✓ Proxy URL saved: {base_url}[/green]")
     except ConfigWriteError as e:
         console.print(f"[red]Error saving proxy URL: {e}[/red]")
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
     # Summary
     console.print("\n" + "=" * 60)

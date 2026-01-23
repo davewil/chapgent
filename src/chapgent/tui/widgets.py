@@ -302,6 +302,45 @@ class ConversationPanel(Static):
         scroll = self.query_one("#conversation-messages", VerticalScroll)
         scroll.query("*").remove()
 
+    def get_selected_messages(self) -> list[MarkdownMessage]:
+        """Get all selected messages in order.
+
+        Returns:
+            List of selected MarkdownMessage widgets.
+        """
+        scroll = self.query_one("#conversation-messages", VerticalScroll)
+        messages = list(scroll.query(MarkdownMessage))
+        return [msg for msg in messages if msg.selected]
+
+    def get_selected_content(self) -> str:
+        """Get the content of all selected messages.
+
+        Returns:
+            Concatenated content of selected messages with role prefixes.
+        """
+        selected = self.get_selected_messages()
+        if not selected:
+            return ""
+
+        parts = []
+        for msg in selected:
+            prefix = "You: " if msg.role == "user" else "Agent: "
+            parts.append(f"{prefix}{msg.content}")
+
+        return "\n\n".join(parts)
+
+    def clear_selection(self) -> None:
+        """Deselect all messages."""
+        scroll = self.query_one("#conversation-messages", VerticalScroll)
+        for msg in scroll.query(MarkdownMessage):
+            msg.selected = False
+
+    def select_all(self) -> None:
+        """Select all messages."""
+        scroll = self.query_one("#conversation-messages", VerticalScroll)
+        for msg in scroll.query(MarkdownMessage):
+            msg.selected = True
+
 
 class ToolResultItem(Static):
     """Widget to display a tool result."""

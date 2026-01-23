@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 
 from rich.markdown import Markdown as RichMarkdown
 from rich.panel import Panel
+from textual.events import Click
 from textual.widgets import Static
 
 from .highlighter import SyntaxHighlighter, get_highlighter
@@ -138,6 +139,7 @@ class MarkdownMessage(Static):
     - Syntax-highlighted code blocks
     - Role-based CSS classes (user-message, agent-message)
     - Content updates for streaming support
+    - Selection support for clipboard copy
 
     Attributes:
         DEFAULT_CSS: Embedded CSS styles for the widget.
@@ -157,6 +159,10 @@ class MarkdownMessage(Static):
     MarkdownMessage.agent-message {
         background: $secondary-darken-2;
         border: round $secondary;
+    }
+
+    MarkdownMessage.selected {
+        border: double $warning;
     }
     """
 
@@ -192,6 +198,7 @@ class MarkdownMessage(Static):
         self._content = content
         self._role = role
         self._renderer = renderer or MarkdownRenderer()
+        self._selected = False
 
     @property
     def content(self) -> str:
@@ -232,3 +239,30 @@ class MarkdownMessage(Static):
         """
         self._content = content
         self.refresh()
+
+    @property
+    def selected(self) -> bool:
+        """Get the selection state."""
+        return self._selected
+
+    @selected.setter
+    def selected(self, value: bool) -> None:
+        """Set the selection state.
+
+        Args:
+            value: True to select, False to deselect.
+        """
+        self._selected = value
+        if value:
+            self.add_class("selected")
+        else:
+            self.remove_class("selected")
+
+    def on_click(self, event: Click) -> None:
+        """Handle click events to toggle selection.
+
+        Args:
+            event: The click event.
+        """
+        self.selected = not self.selected
+        event.stop()

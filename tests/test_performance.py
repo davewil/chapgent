@@ -203,7 +203,7 @@ class TestLargeFileHandling:
 
     @pytest.mark.asyncio
     async def test_read_10mb_file(self, tmp_path):
-        """Verify read_file handles 10MB file."""
+        """Verify read_file handles 10MB file with truncation."""
         large_file = tmp_path / "large_10mb.txt"
         content = "A" * (10 * 1024 * 1024)  # 10MB
         large_file.write_text(content, encoding="utf-8")
@@ -215,7 +215,10 @@ class TestLargeFileHandling:
         duration_ms = (end - start) * 1000
         print(f"\nread_file 10MB: {duration_ms:.2f}ms")
 
-        assert len(result) == 10 * 1024 * 1024
+        # Large files are truncated to 30KB to prevent context overflow
+        assert "[TRUNCATED:" in result
+        assert "10,485,760 bytes" in result  # Original file size in message
+        assert result.startswith("A" * 1000)  # First part should be the file content
         # Should complete in reasonable time (allow more time for large files)
         assert duration_ms < 5000, f"10MB read took {duration_ms:.2f}ms, expected <5000ms"
 

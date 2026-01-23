@@ -1513,3 +1513,52 @@
     * If performance varies too much, indicates theme-specific issues
   - Phase 6 Syntax Highlighting COMPLETE (all 5 phases done)
   - Total: 1475 tests pass (8 performance tests added)
+2026-01-22: Implemented Message Selection and Clipboard Feature (Phase 5 TUI Enhancement):
+  - Added selection support to MarkdownMessage widget (src/chapgent/tui/markdown.py):
+    * selected property with getter/setter for selection state
+    * on_click handler to toggle selection on click
+    * CSS class 'selected' applied when selected (yellow double border)
+    * Selection state preserved across updates
+  - Added selection management methods to ConversationPanel (src/chapgent/tui/widgets.py):
+    * get_selected_messages(): Returns list of selected MarkdownMessage widgets
+    * get_selected_content(): Returns concatenated content with role prefixes ("You:", "Agent:")
+    * clear_selection(): Deselects all messages
+    * select_all(): Selects all messages
+  - Added copy action to ChapgentApp (src/chapgent/tui/app.py):
+    * action_copy_selection(): Copies selected messages to clipboard (Ctrl+Shift+C)
+    * Shows notification on success/warning if no selection
+  - Added CSS styling for selected messages in styles.tcss:
+    * Double yellow border for visual feedback
+  - Created tests/test_tui/test_selection.py with 15 behavioral tests:
+    * TestMarkdownMessageSelection: 5 tests for widget selection state
+    * TestConversationPanelSelection: 7 tests for panel selection management
+    * TestCopyAction: 2 tests for clipboard action
+    * TestClickSelection: 1 test for click-to-select behavior
+  - Learned: Textual's copy_to_clipboard() method copies text to system clipboard
+  - Learned: event.stop() in on_click prevents event propagation to parent widgets
+  - Learned: CSS class manipulation via add_class/remove_class is efficient and reactive
+  - Message Selection and Clipboard feature COMPLETE
+  - Total: 1537 tests pass (15 selection tests added, 1 test fix)
+2026-01-22: Implemented Phase 7 LiteLLM Gateway OAuth Token Support (partial):
+  - Updated _init_agent_and_app() in cli.py with authentication validation:
+    * Validates API key or OAuth token is configured before starting
+    * Validates OAuth token has base_url configured (proxy required for Claude Max)
+    * Provides helpful error messages guiding users to setup commands
+  - Updated LLMProvider initialization to use OAuth token:
+    * Merges extra_headers with OAuth token as Authorization header
+    * Supports "Bearer {oauth_token}" format for LiteLLM proxy authentication
+  - Updated check_api_key() in ux/first_run.py:
+    * Now checks config file in addition to environment variables
+    * Reads llm.api_key from ~/.config/chapgent/config.toml
+  - Updated setup wizard in cli.py to support two authentication options:
+    * Option 1: Anthropic API Key (pay-per-token)
+    * Option 2: Claude Max Subscription (unlimited via LiteLLM proxy)
+    * Guides user through appropriate setup flow based on choice
+  - Learned: OAuth tokens for Claude Max require LiteLLM proxy to forward Authorization header
+  - Learned: Config file check should happen after env var check (env vars have priority)
+  - Phase 7 OAuth token support: infrastructure complete, CLI commands in progress
+2026-01-22: Fixed test for large file handling:
+  - Updated test_read_10mb_file in test_performance.py to expect truncated output
+  - read_file tool now truncates files >30KB to prevent context overflow (previous commit)
+  - Test now verifies: truncation message present, file size in message, content starts correctly
+  - Learned: Performance tests should match actual tool behavior (truncation is feature, not bug)

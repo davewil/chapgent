@@ -118,17 +118,20 @@ class TestSetupCommand:
     """Tests for 'chapgent setup' command."""
 
     def test_setup_shows_welcome(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """'chapgent setup' should show welcome message."""
+        """'chapgent setup' should show welcome message and options."""
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("CHAPGENT_API_KEY", raising=False)
 
         runner = CliRunner()
         with patch.object(Path, "home", return_value=tmp_path):
-            result = runner.invoke(cli, ["setup"], input="n\nn\n")
+            # Choose option 1 (API key), then enter a valid key (must be 40+ chars for Anthropic)
+            result = runner.invoke(cli, ["setup"], input="1\nsk-ant-api03-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n")
 
         assert result.exit_code == 0
         assert "Welcome" in result.output or "welcome" in result.output
+        # Should show authentication options
+        assert "API Key" in result.output or "Anthropic" in result.output
 
     def test_setup_already_configured(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """'chapgent setup' should detect already configured state."""
@@ -146,31 +149,20 @@ class TestSetupCommand:
         assert result.exit_code == 0
         assert "already set up" in result.output or "configured" in result.output.lower()
 
-    def test_setup_asks_about_api_key(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """'chapgent setup' should ask about API key when missing."""
+    def test_setup_api_key_option(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """'chapgent setup' option 1 should set up API key."""
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("CHAPGENT_API_KEY", raising=False)
 
         runner = CliRunner()
         with patch.object(Path, "home", return_value=tmp_path):
-            # Decline API key setup
-            result = runner.invoke(cli, ["setup"], input="n\nn\n")
+            # Choose option 1 (API key), then enter a valid key (must be 40+ chars for Anthropic)
+            result = runner.invoke(cli, ["setup"], input="1\nsk-ant-api03-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n")
 
         assert result.exit_code == 0
-        # Should ask about API key
-        assert "API" in result.output
-
-    def test_setup_creates_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """'chapgent setup' should offer to create config file."""
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key")
-
-        runner = CliRunner()
-        with patch.object(Path, "home", return_value=tmp_path):
-            # Accept config creation
-            result = runner.invoke(cli, ["setup"], input="y\n")
-
-        assert result.exit_code == 0
+        # Should save the key
+        assert "saved" in result.output.lower() or "complete" in result.output.lower()
         # Config should be created
         config_path = tmp_path / ".config" / "chapgent" / "config.toml"
         assert config_path.exists()
@@ -183,12 +175,27 @@ class TestSetupCommand:
 
         runner = CliRunner()
         with patch.object(Path, "home", return_value=tmp_path):
-            # Enter a short/invalid key and decline to continue
-            result = runner.invoke(cli, ["setup"], input="y\nabc\nn\n")
+            # Choose option 1, enter a short/invalid key and decline to continue
+            result = runner.invoke(cli, ["setup"], input="1\nabc\nn\n")
 
         assert result.exit_code == 0
         # Should show warning about short key
         assert "Warning" in result.output or "short" in result.output.lower() or "cancelled" in result.output.lower()
+
+    def test_setup_claude_max_requires_claude_code(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """'chapgent setup' option 2 should require Claude Code credentials."""
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("CHAPGENT_API_KEY", raising=False)
+
+        runner = CliRunner()
+        with patch.object(Path, "home", return_value=tmp_path):
+            # Choose option 2 (Claude Max) - should fail because no Claude Code credentials
+            result = runner.invoke(cli, ["setup"], input="2\n")
+
+        assert result.exit_code == 0
+        # Should mention Claude Code not found
+        assert "Claude Code" in result.output or "credentials" in result.output.lower()
 
 
 class TestHelpCommandOutput:
@@ -242,14 +249,15 @@ class TestEdgeCases:
         assert result.exit_code != 0
 
     def test_setup_noninteractive(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """'chapgent setup' should work with automatic 'no' responses."""
+        """'chapgent setup' should work when user enters invalid key and declines."""
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("CHAPGENT_API_KEY", raising=False)
 
         runner = CliRunner()
         with patch.object(Path, "home", return_value=tmp_path):
-            result = runner.invoke(cli, ["setup"], input="n\nn\n")
+            # Choose option 1 (API key), enter short key, decline to continue
+            result = runner.invoke(cli, ["setup"], input="1\nshort\nn\n")
 
         assert result.exit_code == 0
 
@@ -269,9 +277,10 @@ class TestIntegration:
         help_result = runner.invoke(cli, ["help", "quickstart"])
         assert help_result.exit_code == 0
 
-        # Then run setup
+        # Then run setup - choose option 1, enter valid key
+        valid_key = "sk-ant-api03-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
         with patch.object(Path, "home", return_value=tmp_path):
-            setup_result = runner.invoke(cli, ["setup"], input="n\nn\n")
+            setup_result = runner.invoke(cli, ["setup"], input=f"1\n{valid_key}\n")
 
         assert setup_result.exit_code == 0
 

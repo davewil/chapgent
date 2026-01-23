@@ -45,11 +45,12 @@ def get_config_path() -> Path:
 def check_api_key() -> bool:
     """Check if an API key is configured.
 
-    Checks environment variables and returns True if any API key is set.
+    Checks environment variables and config file for API key.
 
     Returns:
         True if an API key is found.
     """
+    # Check environment variables first
     api_key_vars = [
         "ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",
@@ -59,6 +60,26 @@ def check_api_key() -> bool:
     for var in api_key_vars:
         if os.environ.get(var):
             return True
+
+    # Check config file
+    config_path = get_config_path()
+    if config_path.exists():
+        try:
+            import sys
+
+            if sys.version_info >= (3, 11):
+                import tomllib
+            else:
+                import tomli as tomllib  # type: ignore[import-not-found,unused-ignore]
+
+            with open(config_path, "rb") as f:
+                config = tomllib.load(f)
+
+            api_key = config.get("llm", {}).get("api_key")
+            if api_key:
+                return True
+        except Exception:
+            pass  # Ignore errors reading config
 
     return False
 

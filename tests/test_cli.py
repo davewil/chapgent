@@ -25,8 +25,16 @@ def test_cli_structure():
 @patch("chapgent.cli.ToolRegistry")
 @patch("chapgent.cli.SessionStorage")
 @patch("chapgent.cli.PermissionManager")
-def test_cli_chat_startup(mock_permissions, mock_storage, mock_registry, mock_provider, mock_agent, mock_app):
+@patch("chapgent.cli.load_config")
+def test_cli_chat_startup(
+    mock_load_config, mock_permissions, mock_storage, mock_registry, mock_provider, mock_agent, mock_app
+):
     """Test that the chat command initializes components and starts the app."""
+    from chapgent.config.settings import LLMSettings, Settings
+
+    # Mock config with API key to pass validation
+    mock_load_config.return_value = Settings(llm=LLMSettings(api_key="test-key"))
+
     runner = CliRunner()
 
     # Run the chat command
@@ -110,11 +118,16 @@ class TestResumeCommand:
     @patch("chapgent.cli.ToolRegistry")
     @patch("chapgent.cli.SessionStorage")
     @patch("chapgent.cli.PermissionManager")
+    @patch("chapgent.cli.load_config")
     def test_resume_session_found(
-        self, mock_permissions, mock_storage_class, mock_registry, mock_provider, mock_agent, mock_app
+        self, mock_load_config, mock_permissions, mock_storage_class, mock_registry, mock_provider, mock_agent, mock_app
     ):
         """Test resume command when session exists."""
+        from chapgent.config.settings import LLMSettings, Settings
         from chapgent.session.models import Session
+
+        # Mock config with API key (not OAuth)
+        mock_load_config.return_value = Settings(llm=LLMSettings(api_key="test-key"))
 
         mock_storage = mock_storage_class.return_value
         mock_storage.load = AsyncMock(
@@ -133,9 +146,14 @@ class TestResumeCommand:
         mock_storage.load.assert_called_with("abc123")
         mock_app.return_value.run.assert_called()
 
+    @patch("chapgent.cli.load_config")
     @patch("chapgent.cli.SessionStorage")
-    def test_resume_session_not_found(self, mock_storage_class):
+    def test_resume_session_not_found(self, mock_storage_class, mock_load_config):
         """Test resume command when session doesn't exist."""
+        from chapgent.config.settings import LLMSettings, Settings
+
+        mock_load_config.return_value = Settings(llm=LLMSettings(api_key="test-key"))
+
         mock_storage = mock_storage_class.return_value
         mock_storage.load = AsyncMock(return_value=None)
 
@@ -182,10 +200,15 @@ class TestConfigCommand:
 @patch("chapgent.cli.ToolRegistry")
 @patch("chapgent.cli.SessionStorage")
 @patch("chapgent.cli.PermissionManager")
+@patch("chapgent.cli.load_config")
 def test_cli_resume_not_found_raises(
-    mock_permissions, mock_storage_class, mock_registry, mock_provider, mock_agent, mock_app
+    mock_load_config, mock_permissions, mock_storage_class, mock_registry, mock_provider, mock_agent, mock_app
 ):
     """Test resume command when session doesn't exist raises ClickException."""
+    from chapgent.config.settings import LLMSettings, Settings
+
+    mock_load_config.return_value = Settings(llm=LLMSettings(api_key="test-key"))
+
     mock_storage = mock_storage_class.return_value
     mock_storage.load = AsyncMock(return_value=None)
 

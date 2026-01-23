@@ -34,6 +34,7 @@ class ChapgentApp(App[None]):
         ("ctrl+p", "command_palette", "Commands"),
         ("ctrl+t", "toggle_tools", "Toggle Tools"),
         ("ctrl+l", "clear", "Clear"),
+        ("ctrl+shift+c", "copy_selection", "Copy"),
     ]
 
     def __init__(
@@ -244,6 +245,19 @@ class ChapgentApp(App[None]):
             self.query_one(ToolPanel).clear()
         except Exception:
             pass  # ToolPanel might not be present
+
+    def action_copy_selection(self) -> None:
+        """Copy selected messages to clipboard."""
+        try:
+            panel = self.query_one(ConversationPanel)
+            content = panel.get_selected_content()
+            if content:
+                self.copy_to_clipboard(content)
+                self.notify("Copied to clipboard.", severity="information")
+            else:
+                self.notify("No messages selected.", severity="warning")
+        except Exception:
+            self.notify("Could not copy to clipboard.", severity="error")
 
     def action_command_palette(self) -> None:
         """Show the command palette."""
