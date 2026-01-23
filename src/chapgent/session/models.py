@@ -45,10 +45,10 @@ class Session(BaseModel):
     id: str
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
-    messages: list[Message] = []
-    tool_history: list[ToolInvocation] = []
+    messages: list[Message] = Field(default_factory=list)
+    tool_history: list[ToolInvocation] = Field(default_factory=list)
     working_directory: str = "."
-    metadata: dict[str, Any] = {}
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class SessionSummary(BaseModel):
