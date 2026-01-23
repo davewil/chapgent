@@ -965,11 +965,15 @@ def proxy() -> None:
 @proxy.command()
 @click.option("--port", default=4000, help="Port to run proxy on")
 @click.option("--host", default="127.0.0.1", help="Host to bind to")
-def start(port: int, host: str) -> None:
+@click.option("--no-configure", is_flag=True, help="Don't auto-configure base_url in config")
+def start(port: int, host: str, no_configure: bool) -> None:
     """Start LiteLLM proxy server (foreground).
 
     Runs a local LiteLLM Gateway that forwards OAuth tokens to Anthropic,
     enabling Claude Max subscription usage with cost tracking.
+
+    By default, this command also configures chapgent to use this proxy
+    by setting llm.base_url in your config. Use --no-configure to skip this.
     """
     import subprocess
     import tempfile
@@ -977,7 +981,21 @@ def start(port: int, host: str) -> None:
     import yaml
     from rich.console import Console
 
+    from chapgent.config.writer import save_config_value
+
     console = Console()
+
+    proxy_url = f"http://{host}:{port}"
+
+    # Auto-configure base_url unless --no-configure is set
+    if not no_configure:
+        try:
+            save_config_value("llm.base_url", proxy_url)
+            console.print(f"[green]✓ Configured llm.base_url = {proxy_url}[/green]\n")
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not auto-configure base_url: {e}[/yellow]")
+            console.print("[dim]You can manually set it with:[/dim]")
+            console.print(f"  chapgent config set llm.base_url {proxy_url}\n")
 
     # Generate LiteLLM config
     config = {
@@ -1017,12 +1035,11 @@ def start(port: int, host: str) -> None:
     with open(config_path, "w") as f:
         yaml.dump(config, f)
 
-    console.print("\n[bold]Starting LiteLLM Proxy[/bold]\n")
+    console.print("[bold]Starting LiteLLM Proxy[/bold]\n")
     console.print(f"Config: {config_path}")
-    console.print(f"URL:    http://{host}:{port}\n")
-    console.print("[dim]Configure chapgent to use this proxy:[/dim]")
-    console.print(f"  export CHAPGENT_BASE_URL=http://{host}:{port}")
-    console.print(f"  export ANTHROPIC_BASE_URL=http://{host}:{port}\n")
+    console.print(f"URL:    {proxy_url}\n")
+    console.print("[dim]In another terminal, run:[/dim]")
+    console.print("  chapgent chat\n")
     console.print("[dim]Press Ctrl+C to stop[/dim]\n")
     console.print("-" * 50)
 
@@ -1034,7 +1051,7 @@ def start(port: int, host: str) -> None:
     except KeyboardInterrupt:
         console.print("\n[yellow]Proxy stopped[/yellow]")
     except FileNotFoundError:
-        console.print("[red]Error: litellm CLI not found. Install with: pip install litellm[proxy][/red]")
+        console.print("[red]Error: litellm CLI not found. Install with: pip install 'litellm[proxy]'[/red]")
         raise SystemExit(1) from None
 
 

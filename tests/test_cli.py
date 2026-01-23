@@ -385,16 +385,17 @@ class TestProxyCommands:
 
     @patch("subprocess.run")
     def test_proxy_start_displays_instructions(self, mock_run):
-        """Verify proxy start shows configuration instructions."""
+        """Verify proxy start auto-configures base_url and shows instructions."""
         # Mock subprocess to raise KeyboardInterrupt immediately
         mock_run.side_effect = KeyboardInterrupt()
 
         runner = CliRunner()
         result = runner.invoke(cli, ["proxy", "start"])
 
-        # Should show proxy info before starting
+        # Should auto-configure base_url and show proxy info before starting
         assert "Starting LiteLLM Proxy" in result.output
-        assert "CHAPGENT_BASE_URL" in result.output
+        assert "Configured llm.base_url" in result.output
+        assert "chapgent chat" in result.output
 
     @patch("subprocess.run")
     def test_proxy_start_custom_port(self, mock_run):

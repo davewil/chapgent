@@ -1655,3 +1655,18 @@
   - Learned: For behavioral tests, focus on what user does and sees, not internal implementation details
   - Phase 5 TUI Enhancements COMPLETE (all phases done)
   - Total: 1590 tests pass (15 new screen tests added)
+2026-01-23: Improved LiteLLM Proxy Start UX (Phase 7):
+  - Updated `chapgent proxy start` to auto-configure `llm.base_url` in config:
+    * Automatically saves base_url before starting the proxy
+    * Users now just need to run `chapgent proxy start` then `chapgent chat` in another terminal
+    * Added `--no-configure` flag to skip auto-configuration if needed
+  - Updated instructions shown during proxy start:
+    * Removed manual CHAPGENT_BASE_URL export instructions (now auto-configured)
+    * Shows "chapgent chat" as the next step
+    * Shows confirmation of config update
+  - Updated test_proxy_start_displays_instructions to verify new behavior:
+    * Checks for "Configured llm.base_url" message
+    * Checks for "chapgent chat" instructions
+  - Learned: Auto-configuration of base_url on proxy start greatly improves UX for Claude Max users
+  - Learned: Keeping --no-configure flag allows advanced users to control behavior
+  - Total: 1590 tests pass
