@@ -189,9 +189,10 @@ async def _init_agent_and_app(
 
                 settings.llm.base_url = proxy_url
 
-            # Build headers with OAuth token
+            # Build headers with OAuth token and required beta header
             headers = dict(settings.llm.extra_headers) if settings.llm.extra_headers else {}
             headers["Authorization"] = f"Bearer {settings.llm.oauth_token}"
+            headers["anthropic-beta"] = "oauth-2025-04-20"  # Required for OAuth tokens
 
             # Use placeholder API key to avoid LiteLLM validation error
             # The proxy will use the Authorization header instead
