@@ -12,6 +12,15 @@ from chapgent.core.parallel import execute_tools_parallel
 from chapgent.core.providers import LLMError, LLMResponse, TokenUsage, classify_llm_error
 from chapgent.core.providers import TextBlock as ProvTextBlock
 from chapgent.core.providers import ToolUseBlock as ProvToolUseBlock
+from chapgent.core.stream_provider import (
+    StreamComplete,
+    StreamError,
+    StreamEvent,
+    StreamingClaudeCodeProvider,
+    TextDelta,
+    ToolCall,
+    ToolResult,
+)
 from chapgent.session.models import ContentBlock, Message, TextBlock, ToolResultBlock, ToolUseBlock
 
 # Default limits
@@ -340,3 +349,131 @@ async def conversation_loop(
         total_tokens=total_tokens_used,
         timestamp=datetime.now(),
     )
+
+
+async def streaming_conversation_loop(
+    provider: StreamingClaudeCodeProvider,
+    user_message: str,
+    cancellation_token: CancellationToken | None = None,
+) -> AsyncIterator[LoopEvent]:
+    """Streaming conversation loop for Claude Max mode.
+
+    This loop uses the StreamingClaudeCodeProvider to stream responses
+    directly from Claude Code CLI, yielding events as they arrive.
+
+    Unlike the regular conversation_loop, this does not manage tools locally -
+    Claude Code handles all tool execution. This loop just passes through
+    the streaming events and handles permission requests via the provider's
+    callback.
+
+    Args:
+        provider: The streaming Claude Code provider.
+        user_message: The user message to send.
+        cancellation_token: Optional token for cancelling execution.
+
+    Yields:
+        LoopEvent instances for each event in the stream:
+        - text_delta: Incremental text from the assistant
+        - tool_call: Tool invocation request
+        - tool_result: Tool execution result
+        - finished: Stream completed
+        - llm_error: Error occurred
+        - cancelled: Operation was cancelled
+    """
+    # Check cancellation before starting
+    if cancellation_token is not None and cancellation_token.is_cancelled:
+        yield LoopEvent(
+            type="cancelled",
+            content="Operation cancelled before starting",
+            cancel_reason=cancellation_token.reason,
+            timestamp=datetime.now(),
+        )
+        yield LoopEvent(type="finished", timestamp=datetime.now())
+        return
+
+    try:
+        async for event in provider.send_message(user_message):
+            # Check cancellation between events
+            if cancellation_token is not None and cancellation_token.is_cancelled:
+                yield LoopEvent(
+                    type="cancelled",
+                    content="Operation cancelled during streaming",
+                    cancel_reason=cancellation_token.reason,
+                    timestamp=datetime.now(),
+                )
+                break
+
+            loop_event = _convert_stream_event(event)
+            if loop_event is not None:
+                yield loop_event
+
+            # Stop on completion or error
+            if isinstance(event, (StreamComplete, StreamError)):
+                break
+
+    except Exception as e:
+        yield LoopEvent(
+            type="llm_error",
+            content=str(e),
+            error_type=type(e).__name__,
+            error_message=str(e),
+            retryable=False,
+            timestamp=datetime.now(),
+        )
+
+    yield LoopEvent(type="finished", timestamp=datetime.now())
+
+
+def _convert_stream_event(event: StreamEvent) -> LoopEvent | None:
+    """Convert a StreamEvent to a LoopEvent.
+
+    Args:
+        event: The stream event from the provider.
+
+    Returns:
+        Corresponding LoopEvent or None for unhandled event types.
+    """
+    if isinstance(event, TextDelta):
+        return LoopEvent(
+            type="text_delta",
+            content=event.text,
+            timestamp=datetime.now(),
+        )
+
+    if isinstance(event, ToolCall):
+        return LoopEvent(
+            type="tool_call",
+            tool_name=event.name,
+            tool_id=event.id,
+            content=json.dumps(event.input),
+            timestamp=datetime.now(),
+        )
+
+    if isinstance(event, ToolResult):
+        return LoopEvent(
+            type="tool_result",
+            tool_id=event.id,
+            content=event.result,
+            timestamp=datetime.now(),
+        )
+
+    if isinstance(event, StreamComplete):
+        # Convert usage dict to total_tokens if available
+        total_tokens = event.usage.get("input_tokens", 0) + event.usage.get("output_tokens", 0)
+        return LoopEvent(
+            type="finished",
+            total_tokens=total_tokens if total_tokens > 0 else None,
+            timestamp=datetime.now(),
+        )
+
+    if isinstance(event, StreamError):
+        return LoopEvent(
+            type="llm_error",
+            content=event.message,
+            error_type=event.code or "StreamError",
+            error_message=event.message,
+            retryable=event.retryable,
+            timestamp=datetime.now(),
+        )
+
+    return None

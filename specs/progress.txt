@@ -1747,3 +1747,34 @@
   - Learned: Mock subprocess pattern: MagicMock for process, AsyncMock for drain(), queue for readline()
   - Phase 8 Phase 1 complete (StreamingClaudeCodeProvider foundation)
   - Total: 1606 tests pass (16 new streaming provider tests)
+2026-01-23: Implemented Phase 8 - Streaming Loop Integration (streaming_conversation_loop):
+  - Added streaming_conversation_loop function to src/chapgent/core/loop.py:
+    * Takes StreamingClaudeCodeProvider and user message
+    * Yields LoopEvent instances converted from StreamEvent types
+    * Supports cancellation via CancellationToken
+  - Implemented _convert_stream_event helper for event type mapping:
+    * TextDelta → LoopEvent(type="text_delta") with incremental text content
+    * ToolCall → LoopEvent(type="tool_call") with JSON-serialized input in content
+    * ToolResult → LoopEvent(type="tool_result") with result content
+    * StreamComplete → LoopEvent(type="finished") with calculated token totals
+    * StreamError → LoopEvent(type="llm_error") with error details and retryable flag
+  - Cancellation support:
+    * Checks cancellation before starting (yields cancelled event immediately)
+    * Checks cancellation between events during streaming
+    * Always yields final finished event for consistent loop termination
+  - Error handling:
+    * Catches provider exceptions and yields llm_error event
+    * Graceful handling of stream errors from Claude Code
+  - Added 10 behavioral tests to tests/test_core/test_loop.py:
+    * TestStreamingLoopTextDeltas: text_delta events, empty deltas preserved
+    * TestStreamingLoopToolCalls: tool_call events, JSON serialized input
+    * TestStreamingLoopCompletion: finished event, token tracking from usage
+    * TestStreamingLoopErrors: stream errors, provider exceptions
+    * TestStreamingLoopCancellation: before start, during streaming
+  - Learned: Mock streaming provider pattern: create_mock_streaming_provider() yields predefined events
+  - Learned: Streaming loop is simpler than regular loop - Claude Code handles tool execution internally
+  - Learned: Event mapping converts StreamEvent union types to unified LoopEvent format
+  - Learned: Always yield final finished event for consistent consumer behavior
+  - Learned: Cancellation check between events allows partial results to be yielded
+  - Phase 8 Phase 2 complete (streaming_conversation_loop integration)
+  - Total: 1616 tests pass (10 new streaming loop tests, 24 loop tests total)

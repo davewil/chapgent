@@ -5,17 +5,28 @@ Tests verify user-facing behavior:
 - Loop respects iteration and token limits
 - Loop handles errors gracefully
 - Loop tracks token usage
+- Streaming loop handles Claude Max events
 """
 
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from chapgent.core.agent import Agent
-from chapgent.core.loop import DEFAULT_MAX_ITERATIONS, conversation_loop
+from chapgent.core.cancellation import CancellationToken
+from chapgent.core.loop import DEFAULT_MAX_ITERATIONS, conversation_loop, streaming_conversation_loop
 from chapgent.core.providers import LLMResponse, TokenUsage
 from chapgent.core.providers import TextBlock as ProvTextBlock
 from chapgent.core.providers import ToolUseBlock as ProvToolUseBlock
+from chapgent.core.stream_provider import (
+    StreamComplete,
+    StreamError,
+    StreamingClaudeCodeProvider,
+    TextDelta,
+    ToolCall,
+    ToolResult,
+)
 from chapgent.session.models import Message, Session, ToolResultBlock
 from chapgent.tools.base import ToolCategory, ToolDefinition, ToolRisk
 
@@ -508,3 +519,251 @@ class TestErrorHandling:
         result_block = tool_result_msg.content[0]
         assert isinstance(result_block, ToolResultBlock)
         assert result_block.is_error is True
+
+
+# =============================================================================
+# Streaming Loop - Claude Max streaming via StreamingClaudeCodeProvider
+# =============================================================================
+
+
+def create_mock_streaming_provider(events: list) -> MagicMock:
+    """Create a mock streaming provider that yields the given events."""
+    provider = MagicMock(spec=StreamingClaudeCodeProvider)
+
+    async def mock_send_message(content: str):
+        for event in events:
+            yield event
+
+    provider.send_message = mock_send_message
+    return provider
+
+
+class TestStreamingLoopTextDeltas:
+    """Streaming loop receives text deltas from Claude Max."""
+
+    @pytest.mark.asyncio
+    async def test_user_receives_text_deltas(self):
+        """User receives text deltas as Claude responds incrementally."""
+        events = [
+            TextDelta(text="Hello"),
+            TextDelta(text=", world!"),
+            StreamComplete(session_id="sess_123", usage={"input_tokens": 10, "output_tokens": 5}),
+        ]
+        provider = create_mock_streaming_provider(events)
+
+        loop_events = []
+        async for event in streaming_conversation_loop(provider, "Say hello"):
+            loop_events.append(event)
+
+        # Should receive text_delta events
+        text_deltas = [e for e in loop_events if e.type == "text_delta"]
+        assert len(text_deltas) == 2
+        assert text_deltas[0].content == "Hello"
+        assert text_deltas[1].content == ", world!"
+
+    @pytest.mark.asyncio
+    async def test_empty_text_deltas_are_preserved(self):
+        """Empty text deltas (for formatting) are passed through."""
+        events = [
+            TextDelta(text=""),
+            TextDelta(text="Content"),
+            StreamComplete(session_id="sess_123"),
+        ]
+        provider = create_mock_streaming_provider(events)
+
+        loop_events = []
+        async for event in streaming_conversation_loop(provider, "Hello"):
+            loop_events.append(event)
+
+        text_deltas = [e for e in loop_events if e.type == "text_delta"]
+        assert len(text_deltas) == 2
+        assert text_deltas[0].content == ""
+        assert text_deltas[1].content == "Content"
+
+
+class TestStreamingLoopToolCalls:
+    """Streaming loop receives tool calls and results from Claude Code."""
+
+    @pytest.mark.asyncio
+    async def test_user_sees_tool_calls(self):
+        """User sees tool call events when Claude uses tools."""
+        events = [
+            TextDelta(text="Let me read that file."),
+            ToolCall(id="tool_123", name="Read", input={"file_path": "/path/to/file.txt"}),
+            ToolResult(id="tool_123", result="File contents here", is_error=False),
+            StreamComplete(session_id="sess_123"),
+        ]
+        provider = create_mock_streaming_provider(events)
+
+        loop_events = []
+        async for event in streaming_conversation_loop(provider, "Read file.txt"):
+            loop_events.append(event)
+
+        # Should have tool_call and tool_result events
+        tool_calls = [e for e in loop_events if e.type == "tool_call"]
+        assert len(tool_calls) == 1
+        assert tool_calls[0].tool_name == "Read"
+        assert tool_calls[0].tool_id == "tool_123"
+
+        tool_results = [e for e in loop_events if e.type == "tool_result"]
+        assert len(tool_results) == 1
+        assert tool_results[0].content == "File contents here"
+
+    @pytest.mark.asyncio
+    async def test_tool_call_input_is_json_serialized(self):
+        """Tool call input dict is JSON serialized in event content."""
+        events = [
+            ToolCall(id="tool_456", name="Write", input={"path": "/tmp/test.txt", "content": "Hello"}),
+            StreamComplete(session_id="sess_123"),
+        ]
+        provider = create_mock_streaming_provider(events)
+
+        loop_events = []
+        async for event in streaming_conversation_loop(provider, "Write file"):
+            loop_events.append(event)
+
+        tool_calls = [e for e in loop_events if e.type == "tool_call"]
+        assert len(tool_calls) == 1
+        # Content should be JSON serialized input
+        input_dict = json.loads(tool_calls[0].content)
+        assert input_dict == {"path": "/tmp/test.txt", "content": "Hello"}
+
+
+class TestStreamingLoopCompletion:
+    """Streaming loop handles stream completion."""
+
+    @pytest.mark.asyncio
+    async def test_stream_completion_yields_finished(self):
+        """StreamComplete event yields a finished event."""
+        events = [
+            TextDelta(text="Done!"),
+            StreamComplete(session_id="sess_abc", usage={"input_tokens": 100, "output_tokens": 50}),
+        ]
+        provider = create_mock_streaming_provider(events)
+
+        loop_events = []
+        async for event in streaming_conversation_loop(provider, "Test"):
+            loop_events.append(event)
+
+        # Should end with finished event
+        assert loop_events[-1].type == "finished"
+
+        # Should have token totals from usage
+        finished_events = [e for e in loop_events if e.type == "finished" and e.total_tokens]
+        assert len(finished_events) >= 1
+        assert finished_events[0].total_tokens == 150  # 100 + 50
+
+    @pytest.mark.asyncio
+    async def test_always_yields_final_finished_event(self):
+        """Loop always yields a final finished event."""
+        events = [
+            TextDelta(text="Hi"),
+            StreamComplete(session_id="sess_123"),
+        ]
+        provider = create_mock_streaming_provider(events)
+
+        loop_events = []
+        async for event in streaming_conversation_loop(provider, "Hello"):
+            loop_events.append(event)
+
+        # Last event must be finished
+        assert loop_events[-1].type == "finished"
+
+
+class TestStreamingLoopErrors:
+    """Streaming loop handles errors gracefully."""
+
+    @pytest.mark.asyncio
+    async def test_stream_error_yields_llm_error(self):
+        """StreamError from provider yields llm_error event."""
+        events = [
+            TextDelta(text="Working..."),
+            StreamError(message="Something went wrong", code="INTERNAL_ERROR", retryable=True),
+        ]
+        provider = create_mock_streaming_provider(events)
+
+        loop_events = []
+        async for event in streaming_conversation_loop(provider, "Do something"):
+            loop_events.append(event)
+
+        # Should have llm_error event
+        error_events = [e for e in loop_events if e.type == "llm_error"]
+        assert len(error_events) == 1
+        assert error_events[0].content == "Something went wrong"
+        assert error_events[0].error_type == "INTERNAL_ERROR"
+        assert error_events[0].retryable is True
+
+    @pytest.mark.asyncio
+    async def test_provider_exception_yields_llm_error(self):
+        """Exception from provider yields llm_error event."""
+        provider = MagicMock(spec=StreamingClaudeCodeProvider)
+
+        async def mock_send_message(content: str):
+            raise RuntimeError("Connection failed")
+            yield  # noqa: B007 - Required to make this an async generator
+
+        provider.send_message = mock_send_message
+
+        loop_events = []
+        async for event in streaming_conversation_loop(provider, "Test"):
+            loop_events.append(event)
+
+        # Should have llm_error event
+        error_events = [e for e in loop_events if e.type == "llm_error"]
+        assert len(error_events) == 1
+        assert "Connection failed" in error_events[0].content
+
+
+class TestStreamingLoopCancellation:
+    """Streaming loop handles cancellation."""
+
+    @pytest.mark.asyncio
+    async def test_cancellation_before_start(self):
+        """Cancelled token before starting yields cancelled event."""
+        events = [
+            TextDelta(text="Should not see this"),
+            StreamComplete(session_id="sess_123"),
+        ]
+        provider = create_mock_streaming_provider(events)
+
+        # Pre-cancelled token
+        token = CancellationToken()
+        token.cancel("User cancelled")
+
+        loop_events = []
+        async for event in streaming_conversation_loop(provider, "Test", cancellation_token=token):
+            loop_events.append(event)
+
+        # Should have cancelled event
+        cancelled_events = [e for e in loop_events if e.type == "cancelled"]
+        assert len(cancelled_events) == 1
+        assert "before starting" in cancelled_events[0].content
+
+    @pytest.mark.asyncio
+    async def test_cancellation_during_streaming(self):
+        """Cancellation during streaming yields cancelled event."""
+        # Provider that yields events with a delay
+        provider = MagicMock(spec=StreamingClaudeCodeProvider)
+        token = CancellationToken()
+
+        async def mock_send_message(content: str):
+            yield TextDelta(text="First")
+            # Simulate cancel happening
+            token.cancel("User interrupted")
+            yield TextDelta(text="Second")  # Should not see this
+            yield StreamComplete(session_id="sess_123")
+
+        provider.send_message = mock_send_message
+
+        loop_events = []
+        async for event in streaming_conversation_loop(provider, "Test", cancellation_token=token):
+            loop_events.append(event)
+
+        # Should have cancelled event
+        event_types = [e.type for e in loop_events]
+        assert "cancelled" in event_types
+
+        # Should still have first text delta
+        text_deltas = [e for e in loop_events if e.type == "text_delta"]
+        assert len(text_deltas) >= 1
+        assert text_deltas[0].content == "First"

@@ -422,3 +422,41 @@ Created `src/chapgent/core/stream_provider.py` with:
 - TestPropertyBased: 2 tests
 
 **Total tests:** 1606 passed
+
+### Phase 2: Streaming Loop Integration (COMPLETE)
+
+**Date:** 2026-01-23
+
+Added `streaming_conversation_loop` to `src/chapgent/core/loop.py`:
+
+- **New Function:**
+  - `streaming_conversation_loop(provider, user_message, cancellation_token)` - Async iterator for Claude Max streaming
+  - Takes `StreamingClaudeCodeProvider` instead of `Agent`
+  - Yields `LoopEvent` instances converted from `StreamEvent` types
+  - Handles cancellation via `CancellationToken`
+
+- **Event Mapping (`_convert_stream_event`):**
+  - `TextDelta` → `LoopEvent(type="text_delta")` for incremental text
+  - `ToolCall` → `LoopEvent(type="tool_call")` with JSON-serialized input
+  - `ToolResult` → `LoopEvent(type="tool_result")`
+  - `StreamComplete` → `LoopEvent(type="finished")` with token totals
+  - `StreamError` → `LoopEvent(type="llm_error")` with error details
+
+- **Cancellation Support:**
+  - Checks cancellation before starting
+  - Checks cancellation between events during streaming
+  - Yields `cancelled` event with reason on cancellation
+  - Always yields final `finished` event
+
+- **Error Handling:**
+  - Catches provider exceptions and yields `llm_error` event
+  - Graceful handling of stream errors from Claude Code
+
+**Tests:** 10 behavioral tests added to `tests/test_core/test_loop.py`:
+- TestStreamingLoopTextDeltas: 2 tests (text_delta events, empty deltas)
+- TestStreamingLoopToolCalls: 2 tests (tool_call events, JSON serialized input)
+- TestStreamingLoopCompletion: 2 tests (finished event, token tracking)
+- TestStreamingLoopErrors: 2 tests (stream errors, provider exceptions)
+- TestStreamingLoopCancellation: 2 tests (before start, during streaming)
+
+**Total tests:** 1616 passed (24 loop tests, 16 stream provider tests)
