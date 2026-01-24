@@ -101,7 +101,9 @@ class TestConversationPanelStreaming:
             assert streaming_msg is not None
             assert streaming_msg.role == "agent"
             assert streaming_msg.content == ""
-            assert streaming_msg.id == "streaming-message"
+            # ID should be unique with counter suffix
+            assert streaming_msg.id is not None
+            assert streaming_msg.id.startswith("streaming-message-")
 
     @pytest.mark.asyncio
     async def test_update_streaming_message_changes_content(self):
@@ -109,11 +111,10 @@ class TestConversationPanelStreaming:
         app = ChapgentApp()
         async with app.run_test():
             panel = app.query_one(ConversationPanel)
-            panel.append_streaming_message()
+            streaming_msg = panel.append_streaming_message()
 
             # Update content
             panel.update_streaming_message("First update")
-            streaming_msg = panel.query_one("#streaming-message", MarkdownMessage)
             assert streaming_msg.content == "First update"
 
             # Update again
@@ -134,6 +135,28 @@ class TestConversationPanelStreaming:
             agent_msgs = panel.query(".agent-message")
             assert len(agent_msgs) == 1
             assert agent_msgs[0].content == "Final content"
+
+    @pytest.mark.asyncio
+    async def test_multiple_streaming_messages_get_unique_ids(self):
+        """Multiple streaming messages should each get unique IDs."""
+        app = ChapgentApp()
+        async with app.run_test():
+            panel = app.query_one(ConversationPanel)
+
+            # First streaming message
+            msg1 = panel.append_streaming_message()
+            panel.update_streaming_message("First message")
+            panel.finalize_streaming_message()
+
+            # Second streaming message
+            msg2 = panel.append_streaming_message()
+            panel.update_streaming_message("Second message")
+            panel.finalize_streaming_message()
+
+            # Both messages should exist with different IDs
+            assert msg1.id != msg2.id
+            agent_msgs = panel.query(".agent-message")
+            assert len(agent_msgs) == 2
 
 
 class TestConversationPanelThemeIntegration:

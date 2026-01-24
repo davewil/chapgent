@@ -201,6 +201,8 @@ class ConversationPanel(Static):
         """Initialize the conversation panel."""
         super().__init__(*args, **kwargs)
         self._renderer: MarkdownRenderer | None = None
+        self._streaming_message_id: str | None = None  # Track current streaming message ID
+        self._streaming_counter: int = 0  # Counter for unique IDs
 
     def _get_renderer(self) -> MarkdownRenderer:
         """Get or create the markdown renderer with current theme.
@@ -267,12 +269,16 @@ class ConversationPanel(Static):
         Returns:
             The MarkdownMessage widget that can be updated via update_content().
         """
+        # Generate a unique ID for this streaming message
+        self._streaming_counter += 1
+        self._streaming_message_id = f"streaming-message-{self._streaming_counter}"
+
         scroll = self.query_one("#conversation-messages", VerticalScroll)
         message = MarkdownMessage(
             "",
             role="agent",
             renderer=self._get_renderer(),
-            id="streaming-message",
+            id=self._streaming_message_id,
         )
         scroll.mount(message)
         scroll.scroll_end(animate=False)
@@ -284,8 +290,11 @@ class ConversationPanel(Static):
         Args:
             content: The new content for the streaming message.
         """
+        if self._streaming_message_id is None:
+            return
+
         try:
-            message = self.query_one("#streaming-message", MarkdownMessage)
+            message = self.query_one(f"#{self._streaming_message_id}", MarkdownMessage)
             message.update_content(content)
             scroll = self.query_one("#conversation-messages", VerticalScroll)
             scroll.scroll_end(animate=False)
@@ -295,14 +304,10 @@ class ConversationPanel(Static):
     def finalize_streaming_message(self) -> None:
         """Convert streaming message to regular message.
 
-        Removes the special ID from the streaming message so it becomes
-        a normal message in the conversation history.
+        Clears the streaming message tracking so the next streaming
+        message can be created with a new unique ID.
         """
-        try:
-            message = self.query_one("#streaming-message", MarkdownMessage)
-            message.id = None  # type: ignore[assignment]  # Remove special ID
-        except Exception:
-            pass
+        self._streaming_message_id = None
 
     def reset_renderer(self) -> None:
         """Reset the renderer to pick up theme changes.
