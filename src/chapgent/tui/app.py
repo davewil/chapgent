@@ -1,4 +1,4 @@
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from textual import work
 from textual.app import App, ComposeResult
@@ -10,6 +10,9 @@ from chapgent.core.agent import Agent
 from chapgent.session.models import Session
 from chapgent.session.storage import SessionStorage
 from chapgent.tui.commands import parse_slash_command
+
+if TYPE_CHECKING:
+    from chapgent.core.stream_provider import StreamingClaudeCodeProvider
 from chapgent.tui.screens import (
     ConfigShowScreen,
     HelpScreen,
@@ -50,12 +53,15 @@ class ChapgentApp(App[None]):
         agent: Agent | None = None,
         storage: SessionStorage | None = None,
         settings: Settings | None = None,
+        streaming_provider: "StreamingClaudeCodeProvider | None" = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self.agent = agent
         self.storage = storage
         self.settings = settings or Settings()
+        self.streaming_provider = streaming_provider
+        self._streaming_content: str = ""  # Buffer for accumulated streaming content
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -95,8 +101,10 @@ class ChapgentApp(App[None]):
         # Update UI
         self.query_one(ConversationPanel).append_user_message(user_input)
 
-        # Run agent
-        if self.agent:
+        # Run agent (streaming or regular mode)
+        if self.streaming_provider:
+            self.run_streaming_agent_loop(user_input)
+        elif self.agent:
             self.run_agent_loop(user_input)
         else:
             self.query_one(ConversationPanel).append_assistant_message("Error: No agent attached to this session.")
@@ -146,6 +154,74 @@ class ChapgentApp(App[None]):
         except Exception as e:
             error_msg = f"Agent error: {e}"
             self.query_one(ConversationPanel).append_assistant_message(error_msg)
+            self.notify(error_msg, severity="error")
+
+    @work(exclusive=True)
+    async def run_streaming_agent_loop(self, user_input: str) -> None:
+        """Run the streaming agent loop for Claude Max mode.
+
+        This method uses the StreamingClaudeCodeProvider to stream responses
+        directly from Claude Code CLI, updating the UI incrementally.
+        """
+        if not self.streaming_provider:
+            return
+
+        from chapgent.core.loop import streaming_conversation_loop
+
+        # Reset streaming content buffer
+        self._streaming_content = ""
+
+        # Create streaming message placeholder
+        panel = self.query_one(ConversationPanel)
+        panel.append_streaming_message()
+
+        try:
+            async for event in streaming_conversation_loop(
+                self.streaming_provider,
+                user_input,
+            ):
+                if event.type == "text_delta" and event.content:
+                    # Accumulate text deltas and update the streaming message
+                    self._streaming_content += event.content
+                    panel.update_streaming_message(self._streaming_content)
+
+                elif event.type == "tool_call" and event.tool_name and event.tool_id:
+                    try:
+                        self.query_one(ToolPanel).append_tool_call(
+                            tool_name=event.tool_name,
+                            tool_id=event.tool_id,
+                            start_time=event.timestamp,
+                        )
+                    except Exception:
+                        pass  # ToolPanel might not be present
+
+                elif event.type == "tool_result" and event.tool_id and event.content is not None:
+                    try:
+                        self.query_one(ToolPanel).update_tool_result(
+                            tool_id=event.tool_id,
+                            tool_name=event.tool_name or "",
+                            result=event.content,
+                            is_error=False,
+                            cached=event.cached,
+                        )
+                    except Exception:
+                        pass  # ToolPanel might not be present
+
+                elif event.type == "llm_error":
+                    error_msg = f"LLM Error: {event.error_message or event.content or 'Unknown error'}"
+                    # Finalize any streaming message first
+                    panel.finalize_streaming_message()
+                    panel.append_assistant_message(error_msg)
+                    self.notify(error_msg, severity="error")
+
+                elif event.type == "finished":
+                    # Finalize the streaming message
+                    panel.finalize_streaming_message()
+
+        except Exception as e:
+            error_msg = f"Streaming error: {e}"
+            panel.finalize_streaming_message()
+            panel.append_assistant_message(error_msg)
             self.notify(error_msg, severity="error")
 
     async def get_permission(self, tool_name: str, args: dict[str, Any]) -> bool:

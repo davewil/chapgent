@@ -517,24 +517,22 @@ class TestCLIPassesSettingsToProvider:
 
     @patch("chapgent.cli.bootstrap.ChapgentApp")
     @patch("chapgent.cli.bootstrap.Agent")
-    @patch("chapgent.cli.bootstrap.ClaudeCodeProvider")
+    @patch("chapgent.cli.bootstrap.StreamingClaudeCodeProvider")
     @patch("chapgent.cli.bootstrap.ToolRegistry")
     @patch("chapgent.cli.bootstrap.SessionStorage")
-    @patch("chapgent.cli.bootstrap.PermissionManager")
     @patch("chapgent.cli.bootstrap.load_config")
     @patch("shutil.which")
-    def test_cli_uses_claude_code_provider_in_max_mode(
+    def test_cli_uses_streaming_provider_in_max_mode(
         self,
         mock_which,
         mock_load_config,
-        mock_permissions,
         mock_storage,
         mock_registry,
-        mock_provider,
+        mock_streaming_provider,
         mock_agent,
         mock_app,
     ):
-        """Verify CLI uses ClaudeCodeProvider in max mode."""
+        """Verify CLI uses StreamingClaudeCodeProvider in max mode."""
         from chapgent.config.settings import LLMSettings, Settings
 
         # Mock claude CLI being available
@@ -555,9 +553,9 @@ class TestCLIPassesSettingsToProvider:
             print(result.output)
         assert result.exit_code == 0
 
-        # Verify ClaudeCodeProvider was called
-        mock_provider.assert_called_once()
-        call_kwargs = mock_provider.call_args.kwargs
+        # Verify StreamingClaudeCodeProvider was called
+        mock_streaming_provider.assert_called_once()
+        call_kwargs = mock_streaming_provider.call_args.kwargs
         assert call_kwargs.get("model") == "sonnet"  # Should map to alias
 
     @patch("chapgent.cli.bootstrap.ChapgentApp")
@@ -627,22 +625,18 @@ class TestCLIPassesSettingsToProvider:
         assert "Claude Code CLI" in result.output or "npm install" in result.output
 
     @patch("chapgent.cli.bootstrap.ChapgentApp")
-    @patch("chapgent.cli.bootstrap.Agent")
-    @patch("chapgent.cli.bootstrap.ClaudeCodeProvider")
+    @patch("chapgent.cli.bootstrap.StreamingClaudeCodeProvider")
     @patch("chapgent.cli.bootstrap.ToolRegistry")
     @patch("chapgent.cli.bootstrap.SessionStorage")
-    @patch("chapgent.cli.bootstrap.PermissionManager")
     @patch("chapgent.cli.bootstrap.load_config")
     @patch("shutil.which")
     def test_cli_max_mode_maps_model_aliases(
         self,
         mock_which,
         mock_load_config,
-        mock_permissions,
         mock_storage,
         mock_registry,
-        mock_provider,
-        mock_agent,
+        mock_streaming_provider,
         mock_app,
     ):
         """Verify CLI maps model names to Claude Code aliases in max mode."""
@@ -664,7 +658,7 @@ class TestCLIPassesSettingsToProvider:
 
         assert result.exit_code == 0
 
-        # Verify ClaudeCodeProvider was called with mapped alias
-        mock_provider.assert_called_once()
-        call_kwargs = mock_provider.call_args.kwargs
+        # Verify StreamingClaudeCodeProvider was called with mapped alias
+        mock_streaming_provider.assert_called_once()
+        call_kwargs = mock_streaming_provider.call_args.kwargs
         assert call_kwargs.get("model") == "opus"

@@ -460,3 +460,61 @@ Added `streaming_conversation_loop` to `src/chapgent/core/loop.py`:
 - TestStreamingLoopCancellation: 2 tests (before start, during streaming)
 
 **Total tests:** 1616 passed (24 loop tests, 16 stream provider tests)
+
+### Phase 3: CLI Integration (COMPLETE)
+
+**Date:** 2026-01-24
+
+Updated `src/chapgent/cli/bootstrap.py` for streaming mode:
+
+- **StreamingClaudeCodeProvider Integration:**
+  - When `auth_mode == "max"`, uses `StreamingClaudeCodeProvider` instead of `ClaudeCodeProvider`
+  - Maps model names to Claude Code aliases (sonnet, opus, haiku)
+  - Passes working directory to streaming provider
+
+- **Permission Callback Wiring:**
+  - Creates async permission callback that invokes `app.get_permission()`
+  - Wires callback to `streaming_provider.permission_callback`
+  - Enables Claude Code tool permissions to flow through Chapgent TUI
+
+- **Early Return for Streaming Mode:**
+  - In streaming mode, skips Agent creation (Claude Code handles tools internally)
+  - Returns app directly with streaming_provider set
+
+**Files Modified:**
+- `src/chapgent/cli/bootstrap.py`: Import StreamingClaudeCodeProvider, wire permission callback
+- `tests/test_cli.py`: Update tests to expect StreamingClaudeCodeProvider in max mode
+
+### Phase 4: TUI Streaming Support (COMPLETE)
+
+**Date:** 2026-01-24
+
+Updated `src/chapgent/tui/app.py` for streaming display:
+
+- **ChapgentApp Enhancements:**
+  - Added `streaming_provider` parameter to `__init__`
+  - Added `_streaming_content` buffer for accumulating text deltas
+  - `on_input_submitted` checks for streaming_provider first
+
+- **New Method `run_streaming_agent_loop()`:**
+  - Uses `streaming_conversation_loop` from core.loop
+  - Creates streaming message placeholder via `panel.append_streaming_message()`
+  - Accumulates `text_delta` events and updates message incrementally
+  - Handles `tool_call` and `tool_result` events in tool panel
+  - Shows errors via `append_assistant_message()`
+  - Finalizes streaming message on `finished` event
+
+- **Event Handling:**
+  - `text_delta`: Accumulates content, updates streaming message
+  - `tool_call`: Shows in tool panel with progress tracking
+  - `tool_result`: Updates tool panel with result
+  - `llm_error`: Shows error message in conversation
+  - `finished`: Finalizes streaming message
+
+**Tests:** 8 behavioral tests in `tests/test_tui/test_streaming.py`:
+- TestStreamingMode: 4 tests (provider setup, text deltas, message accumulation, errors)
+- TestStreamingPermissions: 1 test (permission callback wiring)
+- TestStreamingToolDisplay: 2 tests (tool calls and results in panel)
+- TestStreamingWithNoProvider: 1 test (error handling when no provider)
+
+**Total tests:** 1624 passed (8 new streaming TUI tests)

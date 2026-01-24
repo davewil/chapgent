@@ -13,6 +13,7 @@ from chapgent.core.agent import Agent
 from chapgent.core.mock_provider import MockLLMProvider
 from chapgent.core.permissions import PermissionManager
 from chapgent.core.providers import ClaudeCodeProvider, LLMProvider
+from chapgent.core.stream_provider import StreamingClaudeCodeProvider
 from chapgent.session.models import Session
 from chapgent.session.storage import SessionStorage
 from chapgent.tools.registry import ToolRegistry
@@ -45,42 +46,47 @@ async def init_agent_and_app(
     settings = await load_config()
 
     # 2. Determine auth mode and validate
-    provider: LLMProvider | ClaudeCodeProvider
+    provider: LLMProvider | ClaudeCodeProvider | None = None
+    streaming_provider: StreamingClaudeCodeProvider | None = None
+
+    # Determine effective auth mode
+    auth_mode = auth_mode_override or settings.llm.auth_mode
+
     if use_mock:
         provider = MockLLMProvider(delay=0.3)
-    else:
-        # Determine effective auth mode
-        auth_mode = auth_mode_override or settings.llm.auth_mode
+    elif auth_mode == "max":
+        # Claude Max mode: use StreamingClaudeCodeProvider for real-time streaming
+        # Claude Code handles OAuth authentication internally
+        import shutil
 
-        if auth_mode == "max":
-            # Claude Max mode: delegate to Claude Code CLI
-            # Claude Code handles OAuth authentication internally
-            import shutil
+        if not shutil.which("claude"):
+            raise click.ClickException(
+                "Claude Max mode requires Claude Code CLI.\n\n"
+                "Install Claude Code:\n"
+                "  npm install -g @anthropic-ai/claude-code\n\n"
+                "Then authenticate:\n"
+                "  claude auth login\n\n"
+                "Or switch to API mode:\n"
+                "  chapgent chat --mode api"
+            )
 
-            if not shutil.which("claude"):
-                raise click.ClickException(
-                    "Claude Max mode requires Claude Code CLI.\n\n"
-                    "Install Claude Code:\n"
-                    "  npm install -g @anthropic-ai/claude-code\n\n"
-                    "Then authenticate:\n"
-                    "  claude auth login\n\n"
-                    "Or switch to API mode:\n"
-                    "  chapgent chat --mode api"
-                )
+        # Map model name to Claude Code alias
+        model_alias = settings.llm.model
+        if "sonnet" in model_alias.lower():
+            model_alias = "sonnet"
+        elif "opus" in model_alias.lower():
+            model_alias = "opus"
+        elif "haiku" in model_alias.lower():
+            model_alias = "haiku"
 
-            # Map model name to Claude Code alias
-            model_alias = settings.llm.model
-            if "sonnet" in model_alias.lower():
-                model_alias = "sonnet"
-            elif "opus" in model_alias.lower():
-                model_alias = "opus"
-            elif "haiku" in model_alias.lower():
-                model_alias = "haiku"
+        # Create streaming provider (permission callback wired after app creation)
+        streaming_provider = StreamingClaudeCodeProvider(
+            model=model_alias,
+            working_directory=str(Path.cwd()),
+        )
+        click.echo("Using Claude Max (streaming via Claude Code CLI)\n")
 
-            provider = ClaudeCodeProvider(model=model_alias)
-            click.echo("Using Claude Max (via Claude Code CLI)\n")
-
-        else:  # auth_mode == "api"
+    else:  # auth_mode == "api"
             # API mode: direct API key, no proxy needed
             if not settings.llm.api_key:
                 raise click.ClickException(
@@ -130,8 +136,24 @@ async def init_agent_and_app(
         )
 
     # 4. Initialize App & Wiring
-    app = ChapgentApp(storage=storage, settings=settings)
+    app = ChapgentApp(
+        storage=storage,
+        settings=settings,
+        streaming_provider=streaming_provider,
+    )
 
+    # Wire permission callback to streaming provider if using streaming mode
+    if streaming_provider:
+        async def streaming_permission_callback(tool_name: str, args: dict[str, Any]) -> bool:
+            """Permission callback for streaming mode."""
+            return await app.get_permission(tool_name, args)
+
+        streaming_provider.permission_callback = streaming_permission_callback
+        # In streaming mode, Claude Code handles tools - we only need the app
+        app.theme = settings.tui.theme
+        return app
+
+    # Regular mode: set up permissions and agent
     async def permission_callback(tool_name: str, risk: Any, args: dict[str, Any]) -> bool:
         return await app.get_permission(tool_name, args)
 
@@ -165,7 +187,10 @@ async def init_agent_and_app(
         # shouldn't prevent the agent from starting
         click.echo(f"Warning: Could not load custom system prompt: {e}", err=True)
 
-    # 7. Agent
+    # 7. Agent (only for non-streaming mode)
+    if provider is None:
+        raise click.ClickException("No LLM provider configured.")
+
     agent = Agent(
         provider=provider,
         tools=tools,
