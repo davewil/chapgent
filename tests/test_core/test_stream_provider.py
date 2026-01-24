@@ -75,9 +75,11 @@ class TestTextStreaming:
     @pytest.mark.asyncio
     async def test_user_receives_text_as_it_streams(self) -> None:
         """When Claude responds, user receives text deltas incrementally."""
+        # Claude Code stream-json format uses stream_event with content_block_delta
         stdout_lines = [
-            json.dumps({"type": "assistant", "subtype": "text_delta", "text": "Hello"}),
-            json.dumps({"type": "assistant", "subtype": "text_delta", "text": ", world!"}),
+            json.dumps({"type": "system", "subtype": "init", "session_id": "sess_123"}),
+            json.dumps({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Hello"}}}),
+            json.dumps({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": ", world!"}}}),
             json.dumps({"type": "result", "session_id": "sess_123", "usage": {"input_tokens": 10, "output_tokens": 5}}),
         ]
 
@@ -104,8 +106,8 @@ class TestTextStreaming:
     async def test_empty_text_deltas_are_preserved(self) -> None:
         """Empty text deltas (e.g., for formatting) are passed through."""
         stdout_lines = [
-            json.dumps({"type": "assistant", "subtype": "text_delta", "text": ""}),
-            json.dumps({"type": "assistant", "subtype": "text_delta", "text": "Content"}),
+            json.dumps({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": ""}}}),
+            json.dumps({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Content"}}}),
             json.dumps({"type": "result", "session_id": "sess_123"}),
         ]
 
@@ -135,21 +137,31 @@ class TestToolExecution:
     @pytest.mark.asyncio
     async def test_user_sees_tool_calls_in_stream(self) -> None:
         """When Claude calls a tool, user receives the tool call event."""
+        # Claude Code uses content_block_start for tool_use and assistant message for tool results
         stdout_lines = [
-            json.dumps({"type": "assistant", "subtype": "text_delta", "text": "Let me read that file."}),
+            json.dumps({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Let me read that file."}}}),
             json.dumps({
-                "type": "assistant",
-                "subtype": "tool_use",
-                "id": "tool_123",
-                "name": "Read",
-                "input": {"file_path": "/path/to/file.txt"},
+                "type": "stream_event",
+                "event": {
+                    "type": "content_block_start",
+                    "content_block": {
+                        "type": "tool_use",
+                        "id": "tool_123",
+                        "name": "Read",
+                        "input": {"file_path": "/path/to/file.txt"},
+                    }
+                }
             }),
             json.dumps({
                 "type": "assistant",
-                "subtype": "tool_result",
-                "tool_use_id": "tool_123",
-                "content": "File contents here",
-                "is_error": False,
+                "message": {
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": "tool_123",
+                        "content": "File contents here",
+                        "is_error": False,
+                    }]
+                }
             }),
             json.dumps({"type": "result", "session_id": "sess_123"}),
         ]
@@ -180,18 +192,27 @@ class TestToolExecution:
         """Tool execution errors are marked with is_error flag."""
         stdout_lines = [
             json.dumps({
-                "type": "assistant",
-                "subtype": "tool_use",
-                "id": "tool_123",
-                "name": "Read",
-                "input": {"file_path": "/nonexistent"},
+                "type": "stream_event",
+                "event": {
+                    "type": "content_block_start",
+                    "content_block": {
+                        "type": "tool_use",
+                        "id": "tool_123",
+                        "name": "Read",
+                        "input": {"file_path": "/nonexistent"},
+                    }
+                }
             }),
             json.dumps({
                 "type": "assistant",
-                "subtype": "tool_result",
-                "tool_use_id": "tool_123",
-                "content": "File not found: /nonexistent",
-                "is_error": True,
+                "message": {
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": "tool_123",
+                        "content": "File not found: /nonexistent",
+                        "is_error": True,
+                    }]
+                }
             }),
             json.dumps({"type": "result", "session_id": "sess_123"}),
         ]
@@ -387,7 +408,7 @@ class TestErrorHandling:
             "retryable": True,
         }
         stdout_lines = [
-            json.dumps({"type": "assistant", "subtype": "text_delta", "text": "Working..."}),
+            json.dumps({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Working..."}}}),
             json.dumps(error_event),
         ]
 
@@ -412,7 +433,7 @@ class TestErrorHandling:
         """Malformed JSON lines are silently skipped."""
         stdout_lines = [
             "not valid json",
-            json.dumps({"type": "assistant", "subtype": "text_delta", "text": "Valid"}),
+            json.dumps({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Valid"}}}),
             "{incomplete json",
             json.dumps({"type": "result", "session_id": "sess_123"}),
         ]
@@ -444,7 +465,7 @@ class TestProviderLifecycle:
     async def test_provider_can_be_used_as_context_manager(self) -> None:
         """Provider works as an async context manager."""
         stdout_lines = [
-            json.dumps({"type": "assistant", "subtype": "text_delta", "text": "Hi"}),
+            json.dumps({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Hi"}}}),
             json.dumps({"type": "result", "session_id": "sess_123"}),
         ]
 
@@ -482,7 +503,7 @@ class TestProviderLifecycle:
     async def test_send_message_auto_starts_if_needed(self) -> None:
         """send_message() automatically starts the subprocess if not running."""
         stdout_lines = [
-            json.dumps({"type": "assistant", "subtype": "text_delta", "text": "Hi"}),
+            json.dumps({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Hi"}}}),
             json.dumps({"type": "result", "session_id": "sess_123"}),
         ]
 

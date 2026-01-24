@@ -147,6 +147,8 @@ class StreamingClaudeCodeProvider:
         cmd = [
             claude_path,
             "--print",
+            "--verbose",  # Required for stream-json output
+            "--include-partial-messages",  # Enable streaming text deltas
             "--input-format",
             "stream-json",
             "--output-format",
@@ -195,8 +197,11 @@ class StreamingClaudeCodeProvider:
         if self._process is None or self._process.stdin is None or self._process.stdout is None:
             raise StreamingClaudeCodeProviderError("Subprocess not properly initialized")
 
-        # Send user message as NDJSON
-        msg = json.dumps({"type": "user_message", "content": content})
+        # Send user message as NDJSON (Claude Code stream-json format)
+        msg = json.dumps({
+            "type": "user",
+            "message": {"role": "user", "content": content}
+        })
         try:
             self._process.stdin.write(f"{msg}\n".encode())
             await self._process.stdin.drain()
@@ -265,6 +270,12 @@ class StreamingClaudeCodeProvider:
     def _parse_event(self, line: str) -> StreamEvent | None:
         """Parse an NDJSON line into a StreamEvent.
 
+        Claude Code stream-json format:
+        - {"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"..."}}}
+        - {"type":"stream_event","event":{"type":"tool_use",...}} for tool calls
+        - {"type":"result","subtype":"success",...} for completion
+        - {"type":"system","subtype":"permission_request",...} for permissions
+
         Args:
             line: Raw JSON line from the stream.
 
@@ -282,25 +293,41 @@ class StreamingClaudeCodeProvider:
         msg_type = data.get("type")
         subtype = data.get("subtype")
 
-        # Text delta from assistant
-        if msg_type == "assistant" and subtype == "text_delta":
-            return TextDelta(text=data.get("text", ""))
+        # Handle streaming events (content deltas, tool calls)
+        if msg_type == "stream_event":
+            event = data.get("event", {})
+            event_type = event.get("type")
 
-        # Tool invocation from assistant
-        if msg_type == "assistant" and subtype == "tool_use":
-            return ToolCall(
-                id=data.get("id", ""),
-                name=data.get("name", ""),
-                input=data.get("input", {}),
-            )
+            # Text delta from content_block_delta
+            if event_type == "content_block_delta":
+                delta = event.get("delta", {})
+                if delta.get("type") == "text_delta":
+                    return TextDelta(text=delta.get("text", ""))
 
-        # Tool result
-        if msg_type == "assistant" and subtype == "tool_result":
-            return ToolResult(
-                id=data.get("tool_use_id", ""),
-                result=data.get("content", ""),
-                is_error=data.get("is_error", False),
-            )
+            # Tool call from content_block_start (tool_use type)
+            if event_type == "content_block_start":
+                content_block = event.get("content_block", {})
+                if content_block.get("type") == "tool_use":
+                    return ToolCall(
+                        id=content_block.get("id", ""),
+                        name=content_block.get("name", ""),
+                        input=content_block.get("input", {}),
+                    )
+
+            return None  # Skip other stream events
+
+        # Tool result from assistant message
+        if msg_type == "assistant":
+            message = data.get("message", {})
+            content = message.get("content", [])
+            for block in content:
+                if block.get("type") == "tool_result":
+                    return ToolResult(
+                        id=block.get("tool_use_id", ""),
+                        result=block.get("content", ""),
+                        is_error=block.get("is_error", False),
+                    )
+            return None  # Skip full assistant messages (we use stream deltas)
 
         # Permission request from system
         if msg_type == "system" and subtype == "permission_request":
